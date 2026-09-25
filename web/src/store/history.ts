@@ -5,7 +5,7 @@ import * as idb from './db';
 
 export interface Encounter {
   ts: number;
-  kind: 'aviso' | 'abstencion';
+  kind: 'aviso' | 'abstencion' | 'desconocido';
   identityId: string | null;
   similarity: number;
   latencyMs: number;

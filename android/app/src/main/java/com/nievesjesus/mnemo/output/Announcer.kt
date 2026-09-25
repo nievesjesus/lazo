@@ -29,5 +29,7 @@ class Announcer(ctx: Context) : TextToSpeech.OnInitListener {
     if (ready) tts.speak(text, TextToSpeech.QUEUE_FLUSH, null, "mnemo")
   }
 
+  fun speaking() = ready && tts.isSpeaking
+
   fun shutdown() = tts.shutdown()
 }

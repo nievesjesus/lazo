@@ -1,7 +1,7 @@
 // Pipeline de ocho etapas (figura 7) en el navegador. El cuadro vive sólo dentro de `process`:
 // el canvas de trabajo se sobrescribe en cada ciclo y nada se persiste (RN-02).
 import * as gallery from '../store/gallery';
-import { ABSTAIN_PHRASE, DEFAULT_DECISION, type DecisionConfig, QUALITY } from './config';
+import { ABSTAIN_PHRASE, DEFAULT_DECISION, type DecisionConfig, QUALITY, UNKNOWN_PHRASE } from './config';
 import { type Announcement, classify, DecisionEngine, type State, type Zone } from './decision';
 import { alignCrop, gammaCorrect, meanOf, sharpness, toGray, yawRatio } from './imageops';
 import { type Face, FaceDetector, FaceEmbedder, faceHeight } from './models';
@@ -118,7 +118,7 @@ export class Pipeline {
     res.candidate = best;
     res.sMax = sMax;
     res.zone = classify(sMax, lo, hi);
-    const ann = this.engine.step({ tMs, facePresent: true, usable: true, identityId: best?.id ?? null, sMax, weakTemplate: weak });
+    const ann = this.engine.step({ tMs, facePresent: true, usable: true, identityId: best?.id ?? null, sMax, weakTemplate: weak, embedding: a.embedding });
     res.state = this.engine.state;
     res.announcement = ann;
     if (ann?.kind === 'match') {
@@ -126,6 +126,8 @@ export class Pipeline {
       res.phrase = res.identity?.phrase ?? null;
     } else if (ann?.kind === 'abstain') {
       res.phrase = ABSTAIN_PHRASE;
+    } else if (ann?.kind === 'unknown') {
+      res.phrase = UNKNOWN_PHRASE;
     }
     return res;
   }

@@ -4,6 +4,7 @@
     python -m mnemo.cli live                                        # reconocimiento en vivo
     python -m mnemo.cli live --source http://192.168.0.10:8080/video   # cámara del teléfono (IP-cam)
     python -m mnemo.cli live --source glasses                       # puente desde la app Android
+    python -m mnemo.cli live --listen                               # micrófono: «¿quién es?» (faster-whisper local)
     python -m mnemo.cli list | revoke <id>
 """
 from __future__ import annotations
@@ -11,6 +12,7 @@ from __future__ import annotations
 import argparse
 import platform
 import subprocess
+import threading
 import time
 from pathlib import Path
 
@@ -18,12 +20,12 @@ import cv2
 import numpy as np
 
 from .capture import CaptureSource, GlassesBridgeSource, WebcamSource
-from .config import Config
+from .config import Config, DecisionConfig
 from .decision import State, Zone
 from .embedder import template_from_shots
 from .gallery import Consent, FileKeyProvider, Gallery
 from .history import Encounter, History
-from .pipeline import Pipeline
+from .pipeline import NOBODY_PHRASE, UNCLEAR_PHRASE, Pipeline
 
 DATA_DIR = Path.home() / ".mnemo"
 
@@ -36,12 +38,19 @@ def open_source(spec: str) -> CaptureSource:
     return WebcamSource(int(spec) if spec.isdigit() else spec)
 
 
+_speaking: subprocess.Popen | None = None
+
+
 def speak(text: str) -> None:
     """TTS local del sistema operativo (tabla 7): sin servicios en la nube."""
+    global _speaking
+    print(f"[aviso al oído] {text}")
     if platform.system() == "Darwin":
-        subprocess.Popen(["say", "-v", "Paulina", text])
-    else:
-        print(f"[aviso al oído] {text}")
+        _speaking = subprocess.Popen(["say", "-v", "Paulina", text], stderr=subprocess.DEVNULL)
+
+
+def is_speaking() -> bool:
+    return _speaking is not None and _speaking.poll() is None
 
 
 def open_stores(cfg: Config) -> tuple[Gallery, History]:
@@ -72,37 +81,53 @@ def draw(img: np.ndarray, res, cfg: Config) -> None:
 
 
 def cmd_live(args) -> None:
-    cfg = Config()
+    cfg = Config(decision=DecisionConfig(announce_on_change=not args.no_change, announce_unknown=not args.quiet_unknown))
     gallery, history = open_stores(cfg)
     pipe = Pipeline(cfg, gallery)
-    print(f"Galería: {len(gallery.active())} identidades activas. 'q' sale, 'p' modo privacidad.")
+    print(f"Galería: {len(gallery.active())} identidades activas. 'q' sale, 'p' modo privacidad, 'w' = «¿quién es?».")
     privacy = False
-    first_seen = None
     discard_counted = False
+    asked = threading.Event()
+    pending_ask: dict | None = None
+    listener = None
+    if args.listen:
+        from .voice import VoiceListener
+
+        print("Cargando Whisper (la primera vez descarga ~145 MB; después funciona sin red)…")
+        listener = VoiceListener(on_ask=lambda _t: asked.set(), muted=is_speaking, on_text=lambda t: print(f"[oído] {t}"))
+        listener.start()
+        print("Escuchando «¿quién es?»…")
     with open_source(args.source) as src:
         for frame in src.frames():
             if privacy:
                 img = np.zeros_like(frame.image)
                 cv2.putText(img, "MODO PRIVACIDAD", (40, 80), cv2.FONT_HERSHEY_SIMPLEX, 1.2, (255, 255, 255), 2)
             else:
+                if asked.is_set():
+                    asked.clear()
+                    pipe.engine.request()
+                    pending_ask = {"t": frame.t_ms, "face": False}
                 res = pipe.process(frame.image, frame.t_ms)
-                if res.face is not None and first_seen is None:
-                    first_seen = frame.t_ms
                 if res.state == State.IDLE:
-                    first_seen, discard_counted = None, False
+                    discard_counted = False
                 if res.state == State.DISCARDING and not discard_counted:
                     history.count_discard()  # RN-04: sólo un evento anónimo en el contador del día
                     discard_counted = True
+                if pending_ask is not None:
+                    pending_ask["face"] |= res.face is not None
                 if res.phrase:
+                    pending_ask = None
                     speak(res.phrase)
                     ann = res.announcement
-                    kind = "aviso" if ann.kind == Zone.MATCH else "abstencion"
+                    kind = {Zone.MATCH: "aviso", Zone.ABSTAIN: "abstencion", Zone.REJECT: "desconocido"}[ann.kind]
                     ident = next((i for i in gallery.active() if i.id == ann.identity_id), None)
-                    history.log(
-                        Encounter(time.time(), kind, ann.identity_id, ann.s_max, frame.t_ms - (first_seen or frame.t_ms)),
-                        consented=ident.consent.encounter_log if ident else True,
-                    )
-                    print(f"[{kind}] {res.phrase}  s={ann.s_max:.3f}  {ann.hits}/{ann.window}  {res.timings_ms}")
+                    # Sin autorización de registro, el aviso se anota sin identidad.
+                    consented = bool(ident and ident.consent.encounter_log)
+                    history.log(Encounter(time.time(), kind, ann.identity_id if consented else None, ann.s_max, ann.latency_ms))
+                    print(f"[{kind} · {ann.reason}] s={ann.s_max:.3f}  {ann.hits}/{ann.window}  {res.timings_ms}")
+                elif pending_ask is not None and frame.t_ms - pending_ask["t"] > 2500:
+                    speak(UNCLEAR_PHRASE if pending_ask["face"] else NOBODY_PHRASE)
+                    pending_ask = None
                 img = frame.image.copy()
                 draw(img, res, cfg)
             cv2.imshow("MNEMO · vista del portador", img)
@@ -112,7 +137,11 @@ def cmd_live(args) -> None:
             if key == ord("p"):
                 privacy = not privacy
                 pipe.engine.reset()
+            if key == ord("w"):
+                asked.set()
             del frame  # RN-02: el cuadro no sobrevive al ciclo
+    if listener:
+        listener.stop()
     cv2.destroyAllWindows()
 
 
@@ -191,6 +220,9 @@ def main() -> None:
     sub = ap.add_subparsers(required=True)
     p = sub.add_parser("live")
     p.add_argument("--source", default="0", help="índice de cámara, URL de IP-cam o 'glasses'")
+    p.add_argument("--listen", action="store_true", help="micrófono abierto para «¿quién es?» (faster-whisper local)")
+    p.add_argument("--no-change", action="store_true", help="no avisar solo al cambiar de persona (sólo a pedido)")
+    p.add_argument("--quiet-unknown", action="store_true", help="no decir «no es nadie conocido» salvo que pregunten")
     p.set_defaults(fn=cmd_live)
     p = sub.add_parser("enroll")
     p.add_argument("--name", required=True)

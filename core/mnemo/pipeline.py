@@ -20,6 +20,9 @@ from .preprocess import enhance
 from .quality import QualityReport, assess
 
 ABSTAIN_PHRASE = "Hay alguien, pero no lo reconozco."
+UNKNOWN_PHRASE = "No es nadie conocido. Podés invitarlo a sumarse al círculo."
+NOBODY_PHRASE = "No veo a nadie frente a vos."
+UNCLEAR_PHRASE = "No logro ver bien la cara."
 
 
 @dataclass
@@ -98,7 +101,7 @@ class Pipeline:
         tau_low, tau_high = self.engine.thresholds(weak)
         res.zone = classify(s_max, tau_low, tau_high)
         ann = self.engine.step(
-            Observation(t_ms, True, True, cand.id if cand else None, s_max, weak_template=weak)
+            Observation(t_ms, True, True, cand.id if cand else None, s_max, weak_template=weak, embedding=emb)
         )
         lap("decision")
         res.state = self.engine.state
@@ -106,6 +109,8 @@ class Pipeline:
         if ann is not None:
             if ann.kind == Zone.MATCH:
                 res.phrase = next(i.phrase for i in self.gallery.active() if i.id == ann.identity_id)
-            else:
+            elif ann.kind == Zone.ABSTAIN:
                 res.phrase = ABSTAIN_PHRASE
+            else:
+                res.phrase = UNKNOWN_PHRASE
         return res

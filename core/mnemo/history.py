@@ -16,7 +16,7 @@ DAY = 24 * 3600
 @dataclass
 class Encounter:
     ts: float
-    kind: str                # "aviso" | "abstencion"
+    kind: str                # "aviso" | "abstencion" | "desconocido"
     identity_id: str | None
     similarity: float
     latency_ms: float
@@ -39,9 +39,8 @@ class History:
         with self.db:
             self.db.execute("DELETE FROM encounters WHERE ts < ?", (time.time() - self.retention,))
 
-    def log(self, e: Encounter, consented: bool = True) -> None:
-        if e.kind == "aviso" and not consented:
-            return  # la persona no autorizó el registro de encuentros
+    def log(self, e: Encounter) -> None:
+        """Si la persona no autorizó el registro, quien llama pasa ``identity_id=None``."""
         with self.db:
             self.db.execute(
                 "INSERT INTO encounters VALUES (?, ?, ?, ?, ?, ?)",

@@ -31,6 +31,10 @@ class DecisionConfig:
     dwell_ms: int = 1500             # CU-02: el rostro permanece > 1,5 s antes de avisar
     encounter_gap_ms: int = 8000     # sin rostro durante este lapso ⇒ nuevo encuentro (RN-08)
     max_failed_frames: int = 3       # CU-02 E1: tras 3 cuadros inutilizables se interrumpe
+    change_threshold: float = 0.45   # coseno mínimo con el rostro anunciado para seguir siendo «la misma persona»
+    change_frames: int = 3           # cuadros seguidos por debajo ⇒ cambio de persona ⇒ encuentro nuevo
+    announce_on_change: bool = True  # al cambiar de persona, avisar sin que pregunten
+    announce_unknown: bool = True    # decir «no es nadie conocido» sin que pregunten (a pedido, siempre)
 
 
 @dataclass(frozen=True)

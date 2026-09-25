@@ -16,6 +16,9 @@ export interface Settings {
   dwellMs: number;
   facing: 'user' | 'environment';
   voice: boolean;
+  announceOnChange: boolean; // al cambiar de persona, avisar sin que pregunten
+  announceUnknown: boolean;  // decir «no es nadie conocido» sin que pregunten
+  listen: boolean;           // micrófono abierto para «¿quién es?» (Whisper local)
   calibration: Calibration | null;
 }
 
@@ -26,6 +29,9 @@ export const DEFAULTS: Settings = {
   dwellMs: DEFAULT_DECISION.dwellMs,
   facing: 'user',
   voice: true,
+  announceOnChange: DEFAULT_DECISION.announceOnChange,
+  announceUnknown: DEFAULT_DECISION.announceUnknown,
+  listen: false,
   calibration: null,
 };
 

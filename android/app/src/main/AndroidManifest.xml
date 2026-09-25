@@ -9,6 +9,8 @@
     <!-- Cámara del teléfono: implementación alternativa del banco de pruebas (sección 7.3). -->
     <uses-permission android:name="android.permission.CAMERA" />
     <uses-feature android:name="android.hardware.camera" android:required="false" />
+    <!-- «¿Quién es?» por voz, reconocido en el dispositivo (SpeechRecognizer on-device). -->
+    <uses-permission android:name="android.permission.RECORD_AUDIO" />
 
     <application
         android:allowBackup="false"

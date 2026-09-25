@@ -47,6 +47,27 @@
         android:textColor="#DDDDDD"
         android:textSize="13sp" />
 
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal">
+
+        <CheckBox android:id="@+id/autoChange" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1"
+            android:checked="true" android:text="Avisar al cambiar" android:textColor="#DDDDDD" android:buttonTint="#FFFFFF" />
+        <CheckBox android:id="@+id/autoUnknown" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1"
+            android:checked="true" android:text="Avisar desconocidos" android:textColor="#DDDDDD" android:buttonTint="#FFFFFF" />
+        <CheckBox android:id="@+id/listen" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1"
+            android:text="Escuchar" android:textColor="#DDDDDD" android:buttonTint="#FFFFFF" />
+    </LinearLayout>
+
+    <TextView
+        android:id="@+id/mic"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="Micrófono apagado"
+        android:textColor="#999999"
+        android:textSize="12sp" />
+
     <Spinner
         android:id="@+id/source"
         android:layout_width="match_parent"

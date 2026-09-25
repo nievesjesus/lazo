@@ -1,5 +1,5 @@
 // Copia los modelos ONNX a public/ para servirlos desde el mismo origen: la app no hace ninguna petición a terceros (RN-05).
-import { copyFileSync, existsSync, mkdirSync } from 'node:fs';
+import { copyFileSync, cpSync, existsSync, mkdirSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -16,4 +16,8 @@ for (const m of ['det_500m.onnx', 'w600k_mbf.onnx']) {
   }
   copyFileSync(src, join(root, 'public', 'models', m));
 }
+// Whisper (opcional): habilita «¿quién es?» por voz, transcripto en el dispositivo.
+const whisper = join(models, 'whisper-base');
+if (existsSync(whisper)) cpSync(whisper, join(root, 'public', 'models', 'whisper-base'), { recursive: true });
+else console.warn('Sin models/whisper-base: la escucha por voz queda deshabilitada (ver scripts/download_models.sh)');
 console.log('Modelos copiados a public/models');

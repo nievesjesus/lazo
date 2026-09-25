@@ -7,6 +7,9 @@ import com.nievesjesus.mnemo.store.SecureGallery
 import kotlin.math.abs
 
 const val ABSTAIN_PHRASE = "Hay alguien, pero no lo reconozco."
+const val UNKNOWN_PHRASE = "No es nadie conocido. Podés invitarlo a sumarse al círculo."
+const val NOBODY_PHRASE = "No veo a nadie frente a vos."
+const val UNCLEAR_PHRASE = "No logro ver bien la cara."
 
 data class QualityReport(val ok: Boolean, val reason: String?, val sharpness: Float, val brightness: Float, val facePx: Float, val yaw: Float)
 
@@ -70,11 +73,12 @@ class Pipeline(ctx: Context, private val gallery: SecureGallery, cfg: DecisionCo
     val weak = best?.isWeak == true
     val (lo, hi) = engine.thresholds(weak)
     val zone = classify(sMax, lo, hi)
-    val ann = engine.step(tMs, true, true, best?.id, sMax, weak)
+    val ann = engine.step(tMs, true, true, best?.id, sMax, weak, emb)
     val phrase = when (ann?.kind) {
       Zone.MATCH -> gallery.get(ann.identityId!!)?.phrase
       Zone.ABSTAIN -> ABSTAIN_PHRASE
-      else -> null
+      Zone.REJECT -> UNKNOWN_PHRASE
+      null -> null
     }
     return done(best, sMax, zone, ann, phrase)
   }

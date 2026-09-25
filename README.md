@@ -11,7 +11,7 @@ El mismo pipeline de ocho etapas (figura 7 de la pre-entrega) está implementado
 | [`web/`](web) | Demo web con webcam o cámara del teléfono. Vista del portador (P-07/P-08) y app del cuidador (P-01 a P-09), todo en el navegador | Unit + e2e OK en Chrome headless. Paridad con Python: coseno ≥ 0,995 por rostro |
 | [`android/`](android) | App Android con la **interfaz de captura abstracta**: cámara del teléfono (CameraX), **Ray-Ban Meta** (Meta Wearables DAT 1.0) y gafas simuladas (MockDeviceKit) | Escrita contra la API del sample oficial; **todavía no compilada** (ver limitaciones) |
 
-Modelos: `buffalo_sc` de InsightFace, que incluye RetinaFace-500MF (detección + 5 puntos) y MobileFaceNet/ArcFace (embedding de 512-d). Son unos 16 MB.
+Modelos: `buffalo_sc` de InsightFace, que incluye RetinaFace-500MF (detección + 5 puntos) y MobileFaceNet/ArcFace (embedding de 512-d), unos 16 MB. Para la escucha por voz del demo web se suma Whisper base en ONNX cuantizado, unos 77 MB.
 
 ```bash
 scripts/download_models.sh
@@ -37,7 +37,10 @@ En *Privacidad → Cámara* elegí **Trasera**. Con el teléfono a la altura de 
 
 **Qué se puede hacer:**
 - *Invitar a alguien al círculo*: sigue la secuencia invitación (P-02) → consentimiento granular (P-04) → captura guiada de 5 tomas con control de nitidez y pose (P-03) → ficha (P-05).
-- *Vista del portador*: recuadro, 5 puntos, similitud, confirmación 3 de 4 y la frase al oído por la voz local del sistema. «¿Quién es?» o la barra espaciadora disparan el modo «sólo a pedido».
+- *Vista del portador*: recuadro, 5 puntos, similitud, confirmación 3 de 4 y la frase al oído por la voz local del sistema.
+- *Cambio de persona*: si otra cara reemplaza a la ya anunciada, se abre un encuentro nuevo. Se detecta cuando el embedding se aleja del rostro anunciado (coseno < 0,45 en 3 cuadros seguidos). Con *Avisar al cambiar de persona* activo, dice quién es sin que preguntes.
+- *Desconocidos*: «No es nadie conocido. Podés invitarlo a sumarse al círculo.». Tiene su propio toggle; cuando preguntás, contesta siempre.
+- *«¿Quién es?»* por botón, barra espaciadora o **voz**. Con *Escuchar «¿quién es?»* activo, un detector de voz recorta lo que decís y **Whisper lo transcribe en el navegador**; el audio no sale del dispositivo. Si no hay nadie, responde «No veo a nadie frente a vos.».
 - *Historial* de 7 días sin imágenes, con reporte de errores. El descarte anónimo de no enrolados sólo suma a un contador.
 - *Privacidad y umbral*: modo privacidad, umbral τ con la banda de abstención visible, FPIR/FNIR estimados (cargando el `eval_report.json` de `core`), exportar auditoría, borrar plantillas y un contador de conexiones salientes.
 - La galería se cifra con AES-GCM, con una clave WebCrypto **no extraíble** guardada en IndexedDB. Nunca se guarda una imagen.
@@ -112,7 +115,13 @@ La [Acceptable Use Policy de Meta Wearables](https://wearables.developer.meta.co
 - **Android no se compiló en esta máquina**: no hay JDK y el SDK local es el 33, mientras que el DAT 1.0 requiere compileSdk 36. El código sigue la API del sample oficial `CameraAccess` 1.0.0. Hay que confirmar el formato del buffer en hardware real, porque el SDK documenta «YUV» sin especificar el layout.
 - **El DAT pide el permiso `INTERNET`** para coordinarse con la app Meta AI. El pipeline de MNEMO no abre conexiones, pero la afirmación «0 tráfico saliente» (RN-05) hay que verificarla con una captura de red y documentar el tráfico propio del SDK.
 - **Preprocesamiento web más liviano**: el navegador aplica corrección gamma pero no CLAHE ni el filtro bilateral, que sí aplica `core`. Los umbrales se calibran con `core`; la paridad medida sobre recortes sin preprocesar es ≥ 0,995 de coseno.
-- **«¿Quién es?» por voz**: en el navegador es un botón o la barra espaciadora. El reconocimiento de voz de Chrome envía el audio a servidores, lo que violaría RN-05. En Android corresponde usar `mwdat-speech`, que es on-device pero experimental.
+- **«¿Quién es?» por voz**: no se usa el reconocimiento de voz de Chrome, porque envía el audio a Google y violaría RN-05. Cada plataforma usa reconocimiento local:
+  - Web: Whisper base con transformers.js.
+  - `core`: faster-whisper (`uv pip install -e "core[voice]"`, luego `mnemo live --listen`).
+  - Android: `SpeechRecognizer.createOnDeviceSpeechRecognizer`. Usa el micrófono del teléfono; para usar el de las gafas está `mwdat-speech`, experimental en el DAT 1.0.
+
+  Whisper a veces entiende «¿Qué es?» en lugar de «¿Quién es?»: esa variante se acepta sólo como frase completa.
+- **Cambio de persona vs. RN-08**: «una frase por encuentro» se mantiene, pero ahora un encuentro también termina cuando cambia la cara. El umbral de cambio (0,45) está fijado a ojo y conviene calibrarlo con el conjunto propio.
 - **Invitación por QR**: en el demo, el alta ocurre en el mismo navegador y el QR es ilustrativo. En la app real el token viaja al teléfono del invitado.
 - **iOS**: no implementado. El DAT tiene SDK Swift equivalente (`meta-wearables-dat-ios`).
 - **Licencia de los pesos**: los modelos de InsightFace son sólo para investigación no comercial. Por eso no se versionan: se descargan con el script.

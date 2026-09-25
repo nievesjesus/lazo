@@ -3,6 +3,7 @@ __pycache__/
 *.egg-info/
 .pytest_cache/
 models/*.onnx
+models/whisper-*/
 eval_report.json
 .DS_Store
 web/public/group-test.jpg

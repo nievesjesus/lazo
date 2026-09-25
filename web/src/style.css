@@ -171,3 +171,13 @@ select { border: 1px solid var(--line); border-radius: 8px; padding: 5px 8px; ba
   .hud-bottom { flex-direction: column; align-items: stretch; }
   .ear { max-width: none; min-width: 0; }
 }
+
+/* ---------- micrófono ---------- */
+.mic { font-size: 12px; padding: 6px 10px; border-radius: 999px; border: 1px solid var(--line); background: var(--paper); color: var(--muted); }
+.mic::before { content: ''; display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: #bbb; margin-right: 6px; vertical-align: 1px; }
+.mic.escuchando { color: var(--ink); }
+.mic.escuchando::before { background: #2e9d52; animation: pulse 1.4s infinite; }
+.mic.transcribiendo::before, .mic.cargando::before { background: var(--warn); }
+.mic.error { color: var(--danger); }
+@keyframes pulse { 50% { opacity: 0.35; } }
+.mic-error { color: var(--danger); font-size: 12px; max-width: 420px; }

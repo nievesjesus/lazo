@@ -1,14 +1,16 @@
-import { ABSTAIN_BAND, ENROLLMENT, MAX_GALLERY } from '../pipeline/config';
+import { ABSTAIN_BAND, ENROLLMENT, MAX_GALLERY, NOBODY_PHRASE, UNCLEAR_PHRASE } from '../pipeline/config';
 import { WebcamSource } from '../pipeline/capture';
 import { centroid } from '../pipeline/models';
 import type { FrameResult, Pipeline } from '../pipeline/pipeline';
 import * as gallery from '../store/gallery';
 import * as history from '../store/history';
 import { type Calibration, estimate, loadSettings, saveSettings, type Settings } from '../store/settings';
+import { type ListenerStatus, VoiceListener } from '../voice/listener';
 import { drawFrame } from './live';
 import { $, ddmmyyyy, esc, hhmm, initials, isToday, num, speak, watchEgress } from './util';
 
 type Tab = 'inicio' | 'circulo' | 'historial' | 'privacidad';
+type ToggleKey = 'privacyMode' | 'onDemand' | 'voice' | 'announceOnChange' | 'announceUnknown' | 'listen';
 
 const STATE_LABEL: Record<string, string> = {
   en_reposo: 'En reposo',
@@ -30,6 +32,12 @@ export class App {
   private lastAnnouncement: { res: FrameResult; at: number } | null = null;
   private fps = 0;
   private discardCounted = false;
+  /** «¿Quién es?» pendiente de respuesta: si vence sin aviso, se explica por qué (nadie / cara poco visible). */
+  private pendingAsk: { at: number; sawFace: boolean } | null = null;
+  private listener = new VoiceListener(
+    () => this.ask(),
+    (s, d) => this.onListenerStatus(s, d),
+  );
 
   constructor(private root: HTMLElement, private pipe: Pipeline) {}
 
@@ -44,8 +52,34 @@ export class App {
       if (el) el.textContent = `${n} conexiones salientes en esta sesión`;
     });
     await this.renderPhone();
-    if (!this.settings.privacyMode) await this.startCamera();
-    else this.renderPrivacyOverlay();
+    this.listener.muted = () => 'speechSynthesis' in window && speechSynthesis.speaking;
+    if (!this.settings.privacyMode) {
+      await this.startCamera();
+      // El micrófono necesita un gesto del usuario en algunos navegadores; si falla, queda el botón.
+      if (this.settings.listen) this.listener.start().catch(() => this.onListenerStatus('error', 'tocá el interruptor para reactivar'));
+    } else this.renderPrivacyOverlay();
+  }
+
+  /** «¿Quién es?» por botón, barra espaciadora o voz: encuentro nuevo que siempre responde. */
+  private ask() {
+    if (this.settings.privacyMode) return;
+    this.pipe.engine.request();
+    this.lastAnnouncement = null;
+    this.pendingAsk = { at: performance.now(), sawFace: false };
+    this.demand.until = performance.now() + 5000;
+  }
+
+  private onListenerStatus(s: ListenerStatus, detail?: string) {
+    const el = document.getElementById('mic');
+    if (el) {
+      el.className = `mic ${s}`;
+      el.textContent = { apagado: 'Micrófono apagado', cargando: 'Cargando voz…', escuchando: 'Escuchando «¿quién es?»', transcribiendo: 'Transcribiendo…', error: 'Voz no disponible' }[s];
+      el.title = detail ?? '';
+    }
+    const err = document.getElementById('mic-error');
+    if (err) err.textContent = s === 'error' ? (detail ?? '') : '';
+    const d = document.getElementById('mic-detail');
+    if (d) d.textContent = detail ?? '';
   }
 
   // ---------------------------------------------------------------- cámara y ciclo
@@ -73,6 +107,8 @@ export class App {
     c.tauHigh = this.settings.tauHigh;
     c.tauLow = Math.max(0, this.settings.tauHigh - ABSTAIN_BAND);
     c.dwellMs = this.settings.onDemand ? 0 : this.settings.dwellMs;
+    c.announceOnChange = this.settings.announceOnChange;
+    c.announceUnknown = this.settings.announceUnknown;
   }
 
   private async loop() {
@@ -95,6 +131,7 @@ export class App {
         res = await this.pipe.process(this.frame, now);
         await this.onResult(res);
       }
+      this.checkPendingAsk(res, now);
       drawFrame(canvas, this.frame, res, this.settings.facing === 'user');
       this.renderWearerHud(res, active);
       this.fps = 0.9 * this.fps + 0.1 * (1000 / Math.max(1, performance.now() - last));
@@ -111,6 +148,7 @@ export class App {
     }
     const ann = res.announcement;
     if (!ann || !res.phrase) return;
+    this.pendingAsk = null;
     this.lastAnnouncement = { res, at: performance.now() };
     speak(res.phrase, this.settings.voice);
     if (this.settings.onDemand) this.demand.until = 0;
@@ -119,13 +157,22 @@ export class App {
     const consented = !!res.identity?.consent.encounterLog;
     await history.log({
       ts: Date.now(),
-      kind: ann.kind === 'match' ? 'aviso' : 'abstencion',
+      kind: ann.kind === 'match' ? 'aviso' : ann.kind === 'abstain' ? 'abstencion' : 'desconocido',
       identityId: consented ? ann.identityId : null,
       similarity: ann.sMax,
       latencyMs: ann.latencyMs,
       hits: `${ann.hits}/${ann.window}`,
     });
     if (this.tab === 'inicio' || this.tab === 'historial') await this.renderPhone();
+  }
+
+  private checkPendingAsk(res: FrameResult | null, now: number) {
+    const p = this.pendingAsk;
+    if (!p) return;
+    if (res?.face) p.sawFace = true;
+    if (now - p.at < 2500) return;
+    this.pendingAsk = null;
+    speak(p.sawFace ? UNCLEAR_PHRASE : NOBODY_PHRASE, this.settings.voice);
   }
 
   // ---------------------------------------------------------------- vista del portador
@@ -168,6 +215,12 @@ export class App {
         <p>${esc(r.identity.relation)}${r.identity.context ? ` · ${esc(r.identity.context)}` : ''}</p>
         <div class="meta">similitud ${num(ann.sMax)} · confirmado en ${ann.hits} de ${ann.window} cuadros · τ = ${num(tau.tauHigh)} · ${Math.round(ann.latencyMs)} ms</div>`;
       ear.classList.remove('abstain');
+    } else if (ann.kind === 'unknown') {
+      card.innerHTML = `
+        <h2>No es nadie conocido</h2>
+        <p>Podés invitarlo a sumarse al círculo.</p>
+        <div class="meta">mejor candidata ${num(ann.sMax)} &lt; ${num(tau.tauLow)} · sin registro biométrico</div>`;
+      ear.classList.add('abstain');
     } else {
       card.innerHTML = `
         <h2>No estoy seguro</h2>
@@ -177,6 +230,10 @@ export class App {
     }
     ear.classList.add('show');
     $('#wearer-ear-text').textContent = `«${r.phrase}»`;
+  }
+
+  private startListening() {
+    this.listener.start().catch((e) => this.onListenerStatus('error', (e as Error).message));
   }
 
   private timing(res: FrameResult) {
@@ -218,6 +275,7 @@ export class App {
         </div>
         <div class="wearer-actions">
           <button id="ask" class="btn">¿Quién es?</button>
+          <span id="mic" class="mic apagado">Micrófono apagado</span><small id="mic-error" class="mic-error"></small>
           <span class="muted">Fuente: <b id="source-name">—</b> · En las gafas el portador no ve pantallas: sólo escucha la frase.</span>
         </div>
       </section>
@@ -236,12 +294,7 @@ export class App {
       }));
     this.root.querySelectorAll<HTMLButtonElement>('.tabs button').forEach((b) =>
       b.addEventListener('click', () => { this.tab = b.dataset.tab as Tab; this.renderPhone(); }));
-    const ask = () => {
-      if (this.settings.privacyMode) return;
-      this.pipe.engine.reset();
-      this.lastAnnouncement = null;
-      this.demand.until = performance.now() + 5000;
-    };
+    const ask = () => this.ask();
     $('#ask').addEventListener('click', ask);
     window.addEventListener('keydown', (e) => {
       if (e.code === 'Space' && !(e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement)) {
@@ -286,6 +339,9 @@ export class App {
 
   private encounterRow(e: history.Encounter, ids: gallery.Identity[]) {
     const ident = ids.find((i) => i.id === e.identityId);
+    if (e.kind === 'desconocido') {
+      return `<div class="row"><span class="avatar ghost">?</span><div class="grow"><b>No es nadie conocido</b><small>${hhmm(e.ts)} · ${num(e.similarity)} · sin registro biométrico</small></div><span class="tag ghost">Desconocido</span></div>`;
+    }
     if (e.kind === 'abstencion') {
       return `<div class="row"><span class="avatar ghost">?</span><div class="grow"><b>Candidata bajo umbral</b><small>${hhmm(e.ts)} · ${num(e.similarity)} · banda de abstención</small></div><span class="tag ghost">Abstuvo</span></div>`;
     }
@@ -339,7 +395,7 @@ export class App {
     const [enc, ids] = await Promise.all([history.recent(), gallery.list()]);
     const av = enc.filter((e) => e.kind === 'aviso').length;
     return `
-      <div class="hero"><small>HISTORIAL · ÚLTIMOS 7 DÍAS</small><h1>${av} avisos · ${enc.length - av} abstenciones</h1><p>Se borra automáticamente a los 7 días</p></div>
+      <div class="hero"><small>HISTORIAL · ÚLTIMOS 7 DÍAS</small><h1>${av} avisos · ${enc.filter((e) => e.kind === 'abstencion').length} abstenciones</h1><p>Se borra automáticamente a los 7 días</p></div>
       <div class="pad">
         <div class="panel">${enc.length ? enc.map((e) => `
           <div class="row"><div class="grow">${this.encounterRow(e, ids)}</div>
@@ -364,6 +420,10 @@ export class App {
           ${this.toggle('privacyMode', 'Modo privacidad', 'Apaga cámara y avisos por completo')}
           ${this.toggle('onDemand', 'Sólo a pedido', 'Identifica sólo al presionar «¿Quién es?» (o barra espaciadora)')}
           ${this.toggle('voice', 'Aviso por voz', 'Voz local del sistema; si no hay voz local, no habla')}
+          ${this.toggle('announceOnChange', 'Avisar al cambiar de persona', 'Si aparece otra cara, dice quién es sin que preguntes')}
+          ${this.toggle('announceUnknown', 'Avisar si no es conocido', '«No es nadie conocido. Podés invitarlo a sumarse al círculo.»')}
+          ${this.toggle('listen', 'Escuchar «¿quién es?»', 'Micrófono abierto; Whisper transcribe en el dispositivo, el audio no sale')}
+          <small id="mic-detail" class="muted tiny"></small>
           <label class="setting"><div><b>Cámara</b><small>La trasera, a la altura de los ojos, reemplaza a las gafas</small></div>
             <select id="facing"><option value="user" ${s.facing === 'user' ? 'selected' : ''}>Frontal</option><option value="environment" ${s.facing === 'environment' ? 'selected' : ''}>Trasera</option></select></label>
         </div>
@@ -388,7 +448,7 @@ export class App {
       </div>`;
   }
 
-  private toggle(key: 'privacyMode' | 'onDemand' | 'voice', title: string, sub: string) {
+  private toggle(key: ToggleKey, title: string, sub: string) {
     return `<label class="setting"><div><b>${title}</b><small>${sub}</small></div><input type="checkbox" class="switch-input" data-setting="${key}" ${this.settings[key] ? 'checked' : ''}/></label>`;
   }
 
@@ -403,13 +463,18 @@ export class App {
 
     screen.querySelectorAll<HTMLInputElement>('[data-setting]').forEach((inp) =>
       inp.addEventListener('change', async () => {
-        const key = inp.dataset.setting as 'privacyMode' | 'onDemand' | 'voice';
+        const key = inp.dataset.setting as ToggleKey;
         this.settings[key] = inp.checked;
         await saveSettings(this.settings);
         this.applyDecisionSettings();
         this.pipe.engine.reset();
         if (key === 'privacyMode') {
-          if (inp.checked) { this.stopCamera(); this.renderPrivacyOverlay(); } else await this.startCamera();
+          if (inp.checked) { this.stopCamera(); this.listener.stop(); this.renderPrivacyOverlay(); }
+          else { await this.startCamera(); if (this.settings.listen) this.startListening(); }
+        }
+        if (key === 'listen') {
+          if (inp.checked && !this.settings.privacyMode) this.startListening();
+          else this.listener.stop();
         }
       }));
     const facing = screen.querySelector<HTMLSelectElement>('#facing');

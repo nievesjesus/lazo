@@ -79,6 +79,49 @@ def test_weak_template_raises_threshold():
     assert ann is not None and ann.kind == Zone.ABSTAIN      # 0,40 < 0,38 + 0,05
 
 
+def face(k):
+    v = np.zeros(512, np.float32)
+    v[k] = 1
+    return v
+
+
+def see(engine, t0, n, ident, s, emb):
+    out = None
+    for k in range(n):
+        out = engine.step(Observation(t0 + k * 100, True, True, ident, s, embedding=emb)) or out
+    return out
+
+
+def test_face_change_announces_again():
+    e = DecisionEngine(DecisionConfig(dwell_ms=0))
+    assert see(e, 0, 4, "marta", 0.7, face(0)).identity_id == "marta"
+    assert see(e, 400, 6, "marta", 0.7, face(0)) is None          # misma persona: silencio
+    b = see(e, 1000, 8, "tomas", 0.7, face(1))
+    assert b.identity_id == "tomas" and b.reason == "cambio"
+
+
+def test_change_silent_until_asked():
+    e = DecisionEngine(DecisionConfig(dwell_ms=0, announce_on_change=False))
+    see(e, 0, 4, "marta", 0.7, face(0))
+    assert see(e, 400, 8, "tomas", 0.7, face(1)) is None
+    e.request()
+    a = see(e, 1300, 4, "tomas", 0.7, face(1))
+    assert a.identity_id == "tomas" and a.reason == "pedido"
+
+
+def test_unknown_is_announced_and_then_known_person():
+    e = DecisionEngine(DecisionConfig(dwell_ms=0))
+    assert see(e, 0, 4, None, 0.05, face(2)).kind == Zone.REJECT
+    assert see(e, 400, 8, "marta", 0.7, face(0)).identity_id == "marta"
+
+
+def test_unknown_quiet_unless_asked():
+    e = DecisionEngine(DecisionConfig(dwell_ms=0, announce_unknown=False))
+    assert see(e, 0, 6, None, 0.05, face(2)) is None
+    e.request()
+    assert see(e, 700, 4, None, 0.05, face(2)).kind == Zone.REJECT
+
+
 # -- métricas -----------------------------------------------------------------------
 def test_threshold_at_fpir():
     s = metrics.Searches(

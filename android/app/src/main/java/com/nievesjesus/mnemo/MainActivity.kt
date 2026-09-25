@@ -9,6 +9,7 @@ import android.os.Bundle
 import android.os.SystemClock
 import android.widget.ArrayAdapter
 import android.widget.Button
+import android.widget.CompoundButton
 import android.widget.EditText
 import android.widget.ImageView
 import android.widget.LinearLayout
@@ -32,6 +33,9 @@ import com.nievesjesus.mnemo.capture.CaptureSource
 import com.nievesjesus.mnemo.capture.GlassesCameraSource
 import com.nievesjesus.mnemo.capture.PhoneCameraSource
 import com.nievesjesus.mnemo.output.Announcer
+import com.nievesjesus.mnemo.output.VoiceListener
+import com.nievesjesus.mnemo.pipeline.NOBODY_PHRASE
+import com.nievesjesus.mnemo.pipeline.UNCLEAR_PHRASE
 import com.nievesjesus.mnemo.pipeline.Pipeline
 import com.nievesjesus.mnemo.pipeline.State
 import com.nievesjesus.mnemo.pipeline.Zone
@@ -72,6 +76,10 @@ class MainActivity : AppCompatActivity() {
   private var loop: Job? = null
   private var privacy = false
   private var wearablesReady = false
+  private lateinit var voice: VoiceListener
+  /** «¿Quién es?» pedido desde la UI o la voz; lo consume el hilo del pipeline. */
+  @Volatile private var askRequested = false
+  private var pendingAsk: Pair<Long, Boolean>? = null // (momento, ¿se vio una cara?)
 
   private val androidPermissions =
       registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { granted ->
@@ -101,14 +109,20 @@ class MainActivity : AppCompatActivity() {
     val spinner = findViewById<Spinner>(R.id.source)
     spinner.adapter = ArrayAdapter(this, android.R.layout.simple_spinner_dropdown_item, Source.entries.map { it.label })
     findViewById<Button>(R.id.start).setOnClickListener { start(Source.entries[spinner.selectedItemPosition]) }
-    findViewById<Button>(R.id.ask).setOnClickListener { pipeline.engine.reset() }
+    findViewById<Button>(R.id.ask).setOnClickListener { askRequested = true }
+    voice = VoiceListener(this, onAsk = { askRequested = true }, onStatus = { runOnUiThread { findViewById<TextView>(R.id.mic).text = it } }, muted = announcer::speaking)
+    findViewById<CompoundButton>(R.id.autoChange).setOnCheckedChangeListener { _, on -> pipeline.engine.cfg.announceOnChange = on }
+    findViewById<CompoundButton>(R.id.autoUnknown).setOnCheckedChangeListener { _, on -> pipeline.engine.cfg.announceUnknown = on }
+    findViewById<CompoundButton>(R.id.listen).setOnCheckedChangeListener { b, on ->
+      if (on && !voice.start()) b.isChecked = false else if (!on) voice.stop()
+    }
     findViewById<Button>(R.id.privacy).setOnClickListener { togglePrivacy(it as Button) }
     findViewById<Button>(R.id.enroll).setOnClickListener { enroll() }
     findViewById<Button>(R.id.register).setOnClickListener {
       if (wearablesReady) Wearables.startRegistration(this) else toast("Concedé los permisos de Bluetooth primero")
     }
 
-    androidPermissions.launch(arrayOf(Manifest.permission.CAMERA, Manifest.permission.BLUETOOTH_CONNECT))
+    androidPermissions.launch(arrayOf(Manifest.permission.CAMERA, Manifest.permission.BLUETOOTH_CONNECT, Manifest.permission.RECORD_AUDIO))
     lifecycleScope.launch {
       runCatching {
         Wearables.registrationState.collect { st ->
@@ -136,19 +150,35 @@ class MainActivity : AppCompatActivity() {
       loop = launch(Dispatchers.Default) {
         src.frames().collect { frame ->
           if (privacy) { frame.release(); return@collect }
+          if (askRequested) {
+            askRequested = false
+            pipeline.engine.request()
+            pendingAsk = frame.timestampMs to false
+          }
           val res = pipeline.process(frame.bitmap, frame.timestampMs)
+          val unanswered = pendingAsk?.let { (t, sawFace) ->
+            val saw = sawFace || res.face != null
+            when {
+              res.phrase != null -> null.also { pendingAsk = null }
+              frame.timestampMs - t > 2500 -> (if (saw) UNCLEAR_PHRASE else NOBODY_PHRASE).also { pendingAsk = null }
+              else -> null.also { pendingAsk = t to saw }
+            }
+          }
           val shown = drawOverlay(frame.bitmap, res)
           frame.release() // RN-02: el cuadro no sobrevive al ciclo
           withContext(Dispatchers.Main) {
             preview.setImageBitmap(shown)
             status.text = "${src.name} · ${res.state.name.lowercase()} · ${res.totalMs} ms" +
                 (res.quality?.reason?.let { " · $it" } ?: if (res.sMax > -1) " · s=%.2f".format(res.sMax) else "")
+            unanswered?.let(announcer::say)
             res.phrase?.let { phrase ->
               announcer.say(phrase)
               val a = res.announcement!!
               card.text = if (a.kind == Zone.MATCH) {
                 val id = gallery.get(a.identityId!!)
                 "${id?.name}\n${id?.relation}\nsimilitud %.2f · %d de %d cuadros · %d ms".format(a.sMax, a.hits, a.window, a.latencyMs)
+              } else if (a.kind == Zone.REJECT) {
+                "No es nadie conocido\nPodés invitarlo a sumarse al círculo.\nmejor candidata %.2f".format(a.sMax)
               } else {
                 "No estoy seguro\nNo digo ningún nombre.\nmejor candidata %.2f".format(a.sMax)
               }
@@ -260,6 +290,7 @@ class MainActivity : AppCompatActivity() {
 
   override fun onDestroy() {
     loop?.cancel()
+    voice.stop()
     pipeline.close()
     announcer.shutdown()
     super.onDestroy()
