@@ -1,0 +1,76 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="#111111"
+    android:orientation="vertical"
+    android:padding="16dp">
+
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:letterSpacing="0.15"
+        android:text="MNEMO · VISTA DEL PORTADOR"
+        android:textColor="#AAAAAA"
+        android:textSize="11sp" />
+
+    <FrameLayout
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_marginTop="8dp"
+        android:layout_weight="1"
+        android:background="#1E1E1E">
+
+        <ImageView
+            android:id="@+id/preview"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:contentDescription="Vista de la cámara"
+            android:scaleType="fitCenter" />
+
+        <TextView
+            android:id="@+id/card"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_gravity="bottom"
+            android:background="#99000000"
+            android:padding="14dp"
+            android:textColor="#FFFFFF"
+            android:textSize="20sp" />
+    </FrameLayout>
+
+    <TextView
+        android:id="@+id/status"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="8dp"
+        android:textColor="#DDDDDD"
+        android:textSize="13sp" />
+
+    <Spinner
+        android:id="@+id/source"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="8dp"
+        android:backgroundTint="#FFFFFF"
+        android:popupBackground="#222222" />
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal">
+
+        <Button android:id="@+id/start" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:text="Iniciar" />
+        <Button android:id="@+id/ask" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:text="¿Quién es?" />
+        <Button android:id="@+id/privacy" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:text="Modo privacidad" />
+    </LinearLayout>
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal">
+
+        <Button android:id="@+id/register" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:text="Registrar gafas (Meta AI)" />
+        <Button android:id="@+id/enroll" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:text="Enrolar (prueba)" />
+    </LinearLayout>
+</LinearLayout>
