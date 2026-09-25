@@ -57,12 +57,13 @@ export class VoiceListener {
   }
 
   private async open() {
-    this.set('cargando', 'modelo de voz (~77 MB la primera vez)');
+    this.set('cargando', '');
     this.worker ??= new Worker(new URL('./whisper.worker.ts', import.meta.url), { type: 'module' });
     const ready = new Promise<void>((resolve, reject) => {
       this.worker!.onmessage = (e) => {
         const m = e.data;
         if (m.type === 'ready') resolve();
+        else if (m.type === 'progress') this.set('cargando', `${m.pct} %`);
         else if (m.type === 'error') {
           reject(new Error(`Whisper: ${m.message}`));
           if (this.status !== 'cargando') this.set('error', `Whisper: ${m.message}`);

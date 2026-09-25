@@ -6,23 +6,49 @@ import * as gallery from '../store/gallery';
 import * as history from '../store/history';
 import { type Calibration, estimate, loadSettings, saveSettings, type Settings } from '../store/settings';
 import { type ListenerStatus, VoiceListener } from '../voice/listener';
+import { confirmDialog, toast } from './feedback';
+import { icon } from './icons';
 import { drawFrame } from './live';
 import { $, ddmmyyyy, esc, hhmm, initials, isToday, num, speak, watchEgress } from './util';
 
-type Tab = 'inicio' | 'circulo' | 'historial' | 'privacidad';
-type ToggleKey = 'privacyMode' | 'onDemand' | 'voice' | 'announceOnChange' | 'announceUnknown' | 'listen';
+type Tab = 'inicio' | 'circulo' | 'historial' | 'ajustes';
+type ToggleKey = 'onDemand' | 'voice' | 'announceOnChange' | 'announceUnknown' | 'listen' | 'details';
+
+const TABS: { key: Tab; label: string; icon: string }[] = [
+  { key: 'inicio', label: 'Inicio', icon: 'home' },
+  { key: 'circulo', label: 'Círculo', icon: 'users' },
+  { key: 'historial', label: 'Historial', icon: 'clock' },
+  { key: 'ajustes', label: 'Ajustes', icon: 'sliders' },
+];
+
+/** Tres niveles de seguridad en lugar de un número: τ_alta para cada uno. */
+const SAFETY = [
+  { key: 'rapido', label: 'Rápido', tau: 0.34, text: 'Reconoce enseguida, pero se equivoca de nombre con más frecuencia.' },
+  { key: 'equilibrado', label: 'Equilibrado', tau: 0.38, text: 'Recomendado. Casi nunca nombra mal y rara vez se queda callado.' },
+  { key: 'prudente', label: 'Prudente', tau: 0.45, text: 'Sólo nombra cuando está muy seguro; a veces calla aunque conozca a la persona.' },
+] as const;
 
 const STATE_LABEL: Record<string, string> = {
-  en_reposo: 'En reposo',
-  observando: 'Observando',
-  afirmando: 'Afirmando',
-  absteniendose: 'Absteniéndose',
-  descartando: 'Descartando',
+  en_reposo: 'en reposo', observando: 'observando', afirmando: 'afirmando', absteniendose: 'absteniéndose', descartando: 'descartando',
+};
+
+/** Motivos de calidad en palabras simples, con una indicación accionable. */
+const FRIENDLY: Record<string, string> = {
+  'rostro pequeño': 'Está lejos · acercate un poco',
+  borroso: 'Imagen movida · quedate quieto un momento',
+  'poca luz': 'Hay poca luz',
+  sobreexpuesto: 'Demasiada luz de frente',
+  'de perfil': 'Está de costado',
+  'detección débil': 'No se ve bien la cara',
+};
+
+const MIC_LABEL: Record<ListenerStatus, string> = {
+  apagado: 'Escuchar', cargando: 'Preparando voz', escuchando: 'Escuchando', transcribiendo: 'Escuchando', error: 'Voz no disponible',
 };
 
 export class App {
   private settings!: Settings;
-  private source!: WebcamSource;
+  private source: WebcamSource | null = null;
   private frame = document.createElement('canvas');
   private tab: Tab = 'inicio';
   private running = false;
@@ -32,6 +58,8 @@ export class App {
   private lastAnnouncement: { res: FrameResult; at: number } | null = null;
   private fps = 0;
   private discardCounted = false;
+  private cameraError: string | null = null;
+  private galleryEmpty = true;
   /** «¿Quién es?» pendiente de respuesta: si vence sin aviso, se explica por qué (nadie / cara poco visible). */
   private pendingAsk: { at: number; sawFace: boolean } | null = null;
   private listener = new VoiceListener(
@@ -48,18 +76,20 @@ export class App {
     this.bindShell();
     watchEgress((n) => {
       this.egress = n;
-      const el = document.getElementById('egress');
-      if (el) el.textContent = `${n} conexiones salientes en esta sesión`;
+      document.querySelectorAll('[data-egress]').forEach((el) => (el.textContent = String(n)));
     });
+    this.galleryEmpty = (await gallery.list()).length === 0;
     await this.renderPhone();
     this.listener.muted = () => 'speechSynthesis' in window && speechSynthesis.speaking;
+    this.onListenerStatus('apagado');
+    this.syncTopbar();
     if (!this.settings.privacyMode) {
       await this.startCamera();
-      // El micrófono necesita un gesto del usuario en algunos navegadores; si falla, queda el botón.
-      if (this.settings.listen) this.listener.start().catch(() => this.onListenerStatus('error', 'tocá el interruptor para reactivar'));
-    } else this.renderPrivacyOverlay();
+      if (this.settings.listen) this.startListening();
+    } else this.renderPaused();
   }
 
+  // ================================================================ acciones globales
   /** «¿Quién es?» por botón, barra espaciadora o voz: encuentro nuevo que siempre responde. */
   private ask() {
     if (this.settings.privacyMode) return;
@@ -67,32 +97,93 @@ export class App {
     this.lastAnnouncement = null;
     this.pendingAsk = { at: performance.now(), sawFace: false };
     this.demand.until = performance.now() + 5000;
+    const b = document.getElementById('ask');
+    b?.classList.add('pulse');
+    setTimeout(() => b?.classList.remove('pulse'), 600);
+  }
+
+  private async setPaused(paused: boolean) {
+    this.settings.privacyMode = paused;
+    await saveSettings(this.settings);
+    this.pipe.engine.reset();
+    this.lastAnnouncement = null;
+    if (paused) {
+      this.stopCamera();
+      this.listener.stop();
+      this.renderPaused();
+    } else {
+      await this.startCamera();
+      if (this.settings.listen) this.startListening();
+    }
+    this.syncTopbar();
+    if (this.tab === 'inicio') await this.renderPhone();
+  }
+
+  private async setToggle(key: ToggleKey, on: boolean) {
+    this.settings[key] = on;
+    await saveSettings(this.settings);
+    this.applyDecisionSettings();
+    if (key === 'onDemand' || key === 'announceOnChange' || key === 'announceUnknown') this.pipe.engine.reset();
+    if (key === 'listen') {
+      if (on && !this.settings.privacyMode) this.startListening();
+      else this.listener.stop();
+    }
+    this.syncTopbar();
+  }
+
+  private syncTopbar() {
+    const pause = document.getElementById('pause');
+    if (pause) {
+      pause.innerHTML = this.settings.privacyMode ? `${icon('play', 18)}<span>Reanudar</span>` : `${icon('pause', 18)}<span>Pausar</span>`;
+      pause.classList.toggle('on', this.settings.privacyMode);
+    }
+    document.getElementById('details')?.classList.toggle('on', this.settings.details);
+    const mic = document.getElementById('mic');
+    mic?.setAttribute('aria-pressed', String(this.settings.listen));
+  }
+
+  private startListening() {
+    this.listener.start().catch(() => { /* el estado de error ya se muestra */ });
   }
 
   private onListenerStatus(s: ListenerStatus, detail?: string) {
-    const el = document.getElementById('mic');
-    if (el) {
-      el.className = `mic ${s}`;
-      el.textContent = { apagado: 'Micrófono apagado', cargando: 'Cargando voz…', escuchando: 'Escuchando «¿quién es?»', transcribiendo: 'Transcribiendo…', error: 'Voz no disponible' }[s];
-      el.title = detail ?? '';
+    const btn = document.getElementById('mic');
+    if (btn) {
+      btn.className = `mic-btn ${s}`;
+      const label = s === 'cargando' && detail ? `${MIC_LABEL[s]} ${detail}` : MIC_LABEL[s];
+      btn.innerHTML = `${icon(s === 'error' ? 'micOff' : 'mic', 18)}<span>${label}</span>`;
     }
-    const err = document.getElementById('mic-error');
-    if (err) err.textContent = s === 'error' ? (detail ?? '') : '';
-    const d = document.getElementById('mic-detail');
-    if (d) d.textContent = detail ?? '';
+    const hint = document.getElementById('mic-hint');
+    if (hint) {
+      hint.className = `hint ${s === 'error' ? 'err' : ''}`;
+      hint.textContent =
+        s === 'escuchando' || s === 'transcribiendo' ? 'Decí «¿Quién es?»' + (detail?.startsWith('«') ? ` · oí ${detail.split(' · ')[0]}` : '')
+        : s === 'cargando' ? 'La primera vez descarga el modelo de voz (~77 MB); después funciona sin internet.'
+        : s === 'error' ? (detail ?? '')
+        : '';
+    }
   }
 
-  // ---------------------------------------------------------------- cámara y ciclo
+  // ================================================================ cámara y ciclo
   private async startCamera() {
     this.source?.stop();
+    this.cameraError = null;
+    this.setStatus('Encendiendo la cámara…', 'idle');
     this.source = new WebcamSource(this.settings.facing);
     try {
       await this.source.start();
     } catch (e) {
-      $('#wearer-status').textContent = `No se pudo abrir la cámara: ${(e as Error).message}`;
+      const err = e as { name?: string; message?: string };
+      this.cameraError = err.name === 'NotAllowedError'
+        ? 'Permití el acceso a la cámara desde el candado de la barra de direcciones y recargá la página.'
+        : err.name === 'NotFoundError' ? 'No se encontró ninguna cámara.'
+        : err.name === 'NotReadableError' ? 'La cámara está en uso por otra aplicación.'
+        : err.message ?? 'No se pudo abrir la cámara.';
+      this.setStatus('Sin cámara', 'idle');
+      this.renderOverlay();
       return;
     }
-    $('#source-name').textContent = this.source.name;
+    this.renderOverlay();
     this.running = true;
     this.loop();
   }
@@ -114,13 +205,12 @@ export class App {
   private async loop() {
     const canvas = $<HTMLCanvasElement>('#wearer-canvas');
     let last = performance.now();
-    while (this.running) {
+    while (this.running && this.source) {
       if (this.enrolling) {
         await new Promise((r) => setTimeout(r, 100));
         continue;
       }
-      const dims = this.source.grab(this.frame);
-      if (!dims) {
+      if (!this.source.grab(this.frame)) {
         await new Promise((r) => requestAnimationFrame(r));
         continue;
       }
@@ -132,8 +222,8 @@ export class App {
         await this.onResult(res);
       }
       this.checkPendingAsk(res, now);
-      drawFrame(canvas, this.frame, res, this.settings.facing === 'user');
-      this.renderWearerHud(res, active);
+      drawFrame(canvas, this.frame, res, this.settings.facing === 'user', this.settings.details);
+      this.renderWearer(res, active);
       this.fps = 0.9 * this.fps + 0.1 * (1000 / Math.max(1, performance.now() - last));
       last = performance.now();
       await new Promise((r) => requestAnimationFrame(r));
@@ -151,9 +241,9 @@ export class App {
     this.pendingAsk = null;
     this.lastAnnouncement = { res, at: performance.now() };
     speak(res.phrase, this.settings.voice);
+    this.showEar(res.phrase, ann.kind !== 'match');
     if (this.settings.onDemand) this.demand.until = 0;
-    // Sin autorización de registro, el aviso se anota sin identidad: el cuidador ve que el sistema habló,
-    // pero no a quién (P-04, tercer permiso).
+    // Sin autorización de registro, el aviso se anota sin identidad (P-04, tercer permiso).
     const consented = !!res.identity?.consent.encounterLog;
     await history.log({
       ts: Date.now(),
@@ -172,195 +262,277 @@ export class App {
     if (res?.face) p.sawFace = true;
     if (now - p.at < 2500) return;
     this.pendingAsk = null;
-    speak(p.sawFace ? UNCLEAR_PHRASE : NOBODY_PHRASE, this.settings.voice);
+    const phrase = p.sawFace ? UNCLEAR_PHRASE : NOBODY_PHRASE;
+    speak(phrase, this.settings.voice);
+    this.showEar(phrase, true);
   }
 
-  // ---------------------------------------------------------------- vista del portador
-  private renderWearerHud(res: FrameResult | null, active: boolean) {
-    const status = $('#wearer-status');
-    const dot = $('#wearer-dot');
-    if (this.settings.onDemand && !active) {
-      status.textContent = 'Sólo a pedido · presioná «¿Quién es?» o la barra espaciadora';
-      dot.className = 'dot idle';
-    } else if (res?.state === 'absteniendose' || res?.zone === 'abstain') {
-      status.textContent = 'Coincidencia por debajo del umbral';
-      dot.className = 'dot warn';
-    } else {
-      status.textContent = 'Procesando en el dispositivo · sin conexión';
-      dot.className = 'dot ok';
-    }
-    $('#wearer-state').textContent = `${STATE_LABEL[this.pipe.engine.state]} · ${num(this.fps, 1)} fps`;
+  // ================================================================ vista del portador
+  private setStatus(text: string, tone: 'ok' | 'warn' | 'idle' | 'live') {
+    const el = document.getElementById('status');
+    if (!el) return;
+    el.className = `status-pill ${tone}`;
+    $('#status-text').textContent = text;
+  }
 
-    const card = $('#wearer-card');
-    const ear = $('#wearer-ear');
-    const a = this.lastAnnouncement;
-    const fresh = a && performance.now() - a.at < 6000;
-    if (!fresh) {
-      card.innerHTML = '';
-      ear.classList.remove('show', 'abstain');
-      if (res?.face && res.quality) {
-        const q = res.quality;
-        card.innerHTML = `<div class="meta">${q.ok
-          ? `${res.candidate ? `mejor candidata ${num(res.sMax)}` : 'galería vacía'} · τ = ${num(this.pipe.engine.cfg.tauHigh)} · ${this.timing(res)} ms`
-          : `cuadro inutilizable: ${esc(q.reason)} · nitidez ${Math.round(q.sharpness)}`}</div>`;
-      }
-      return;
-    }
-    const r = a!.res;
-    const ann = r.announcement!;
-    const tau = this.pipe.engine.cfg;
-    if (ann.kind === 'match' && r.identity) {
-      card.innerHTML = `
-        <h2>${esc(r.identity.name)}</h2>
-        <p>${esc(r.identity.relation)}${r.identity.context ? ` · ${esc(r.identity.context)}` : ''}</p>
-        <div class="meta">similitud ${num(ann.sMax)} · confirmado en ${ann.hits} de ${ann.window} cuadros · τ = ${num(tau.tauHigh)} · ${Math.round(ann.latencyMs)} ms</div>`;
-      ear.classList.remove('abstain');
-    } else if (ann.kind === 'unknown') {
-      card.innerHTML = `
-        <h2>No es nadie conocido</h2>
-        <p>Podés invitarlo a sumarse al círculo.</p>
-        <div class="meta">mejor candidata ${num(ann.sMax)} &lt; ${num(tau.tauLow)} · sin registro biométrico</div>`;
-      ear.classList.add('abstain');
-    } else {
-      card.innerHTML = `
-        <h2>No estoy seguro</h2>
-        <p>No digo ningún nombre. Podés preguntarle cómo se llama.</p>
-        <div class="meta">mejor candidata ${num(ann.sMax)} · banda de abstención ${num(tau.tauLow)}–${num(tau.tauHigh)} · cuadro descartado, nada almacenado</div>`;
-      ear.classList.add('abstain');
-    }
+  private showEar(phrase: string, soft = false) {
+    const ear = $('#ear');
+    ear.classList.toggle('soft', soft);
     ear.classList.add('show');
-    $('#wearer-ear-text').textContent = `«${r.phrase}»`;
+    $('#ear-text').textContent = `«${phrase}»`;
+    clearTimeout((ear as HTMLElement & { _t?: number })._t);
+    (ear as HTMLElement & { _t?: number })._t = window.setTimeout(() => ear.classList.remove('show'), 5000);
   }
 
-  private startListening() {
-    this.listener.start().catch((e) => this.onListenerStatus('error', (e as Error).message));
+  private renderWearer(res: FrameResult | null, active: boolean) {
+    const a = this.lastAnnouncement;
+    const fresh = a && performance.now() - a.at < 6000 ? a : null;
+    const card = $('#card');
+    const cfg = this.pipe.engine.cfg;
+
+    if (fresh) {
+      const r = fresh.res;
+      const ann = r.announcement!;
+      if (ann.kind === 'match' && r.identity) {
+        this.setStatus(`Es ${r.identity.name}`, 'ok');
+        card.innerHTML = `<h2>${esc(r.identity.name)}</h2><p>${esc(r.identity.relation)}${r.identity.context ? ` · ${esc(r.identity.context)}` : ''}</p>`;
+      } else if (ann.kind === 'unknown') {
+        this.setStatus('No es nadie conocido', 'warn');
+        card.innerHTML = `<h2>No es nadie conocido</h2><p>Podés invitarlo a sumarse al círculo.</p>`;
+      } else {
+        this.setStatus('No estoy seguro', 'warn');
+        card.innerHTML = `<h2>No estoy seguro</h2><p>Prefiero no decir un nombre. Podés preguntarle cómo se llama.</p>`;
+      }
+      if (this.settings.details) {
+        card.innerHTML += `<div class="meta">similitud ${num(ann.sMax)} · ${ann.hits} de ${ann.window} cuadros · τ ${num(cfg.tauLow)}–${num(cfg.tauHigh)} · ${Math.round(ann.latencyMs)} ms · ${ann.reason}</div>`;
+      }
+    } else {
+      card.innerHTML = '';
+      const last = this.lastAnnouncement?.res;
+      // Mientras siga la misma persona (encuentro ya anunciado), se mantiene su nombre en el estado.
+      const same = this.pipe.engine.announced && last?.announcement && res?.face;
+      if (same && last.announcement!.kind === 'match' && last.identity) this.setStatus(last.identity.name, 'ok');
+      else if (same && last.announcement!.kind === 'unknown') this.setStatus('No es nadie conocido', 'idle');
+      else if (same) this.setStatus('No estoy seguro', 'idle');
+      else if (this.settings.onDemand && !active) this.setStatus('Esperando que preguntes', 'idle');
+      else if (!res?.face) this.setStatus('Buscando caras', 'live');
+      else if (res.quality && !res.quality.ok) this.setStatus(FRIENDLY[res.quality.reason ?? ''] ?? 'No se ve bien la cara', 'idle');
+      else this.setStatus('Reconociendo…', 'live');
+    }
+
+    const tech = $('#tech');
+    tech.textContent = this.settings.details
+      ? `${STATE_LABEL[this.pipe.engine.state]} · ${num(this.fps, 0)} fps` + (res?.sMax !== undefined && res.sMax > -1 ? ` · mejor ${num(res.sMax)} · τ ${num(cfg.tauHigh)}` : '')
+      : '';
   }
 
-  private timing(res: FrameResult) {
-    return Math.round(Object.values(res.timings).reduce((a, b) => a + b, 0));
+  /** Superposición del video: círculo vacío, cámara sin permiso o pausa. */
+  private renderOverlay() {
+    const el = $('#overlay');
+    if (this.settings.privacyMode) {
+      el.innerHTML = `<div class="overlay-card">${icon('pause', 28)}<h3>En pausa</h3><p>La cámara y los avisos están apagados. No se captura nada.</p><button class="btn light" data-act="resume">Reanudar</button></div>`;
+    } else if (this.cameraError) {
+      el.innerHTML = `<div class="overlay-card">${icon('camera', 28)}<h3>No hay acceso a la cámara</h3><p>${esc(this.cameraError)}</p><button class="btn light" data-act="retry-camera">Reintentar</button></div>`;
+    } else if (this.galleryEmpty && !this.enrolling) {
+      el.innerHTML = `<div class="overlay-card">${icon('userPlus', 28)}<h3>Todavía no hay nadie en el círculo</h3><p>Agregá a una persona de confianza y la próxima vez que la veas te lo digo al oído.</p><button class="btn light" data-act="invite">Agregar a alguien</button></div>`;
+    } else {
+      el.innerHTML = '';
+    }
+    el.classList.toggle('show', !!el.innerHTML);
   }
 
-  private renderPrivacyOverlay() {
+  private renderPaused() {
     const c = $<HTMLCanvasElement>('#wearer-canvas');
-    c.width = 1280;
-    c.height = 720;
     const ctx = c.getContext('2d')!;
-    ctx.fillStyle = '#111';
+    ctx.fillStyle = '#161616';
     ctx.fillRect(0, 0, c.width, c.height);
-    $('#wearer-status').textContent = 'Modo privacidad · cámara y avisos suspendidos';
-    $('#wearer-dot').className = 'dot idle';
-    $('#wearer-card').innerHTML = '<h2>Pausado</h2><p>No hay captura ni inferencia.</p>';
-    $('#wearer-state').textContent = 'En reposo';
+    this.setStatus('En pausa', 'idle');
+    $('#card').innerHTML = '';
+    $('#tech').textContent = '';
+    this.renderOverlay();
   }
 
-  // ---------------------------------------------------------------- estructura
+  // ================================================================ estructura
   private shell() {
     return `
     <header class="topbar">
-      <div class="brand"><span class="logo">M</span><div><strong>MNEMO</strong><small>demo web · reconocimiento facial consentido</small></div></div>
-      <nav class="switch" role="tablist">
-        <button data-view="wearer" class="on">Vista del portador</button>
-        <button data-view="phone">App del cuidador</button>
+      <div class="brand"><span class="logo">M</span><div><strong>MNEMO</strong><small>Te dice al oído quién tenés enfrente</small></div></div>
+      <nav class="switch" aria-label="Vista">
+        <button data-view="wearer" class="on">${icon('glasses', 18)}<span>Gafas</span></button>
+        <button data-view="phone">${icon('users', 18)}<span>Cuidador</span></button>
       </nav>
+      <div class="top-actions">
+        <button id="details" class="icon-btn" title="Detalles técnicos" aria-label="Detalles técnicos">${icon('code', 18)}</button>
+        <button id="pause" class="pill-btn"></button>
+      </div>
     </header>
     <main class="stage" data-view="wearer">
-      <section class="wearer">
+      <section class="wearer" aria-label="Lo que percibe quien usa las gafas">
+        <div class="section-label">${icon('glasses', 16)} Lo que percibe quien usa las gafas</div>
         <div class="viewport">
-          <canvas id="wearer-canvas"></canvas>
-          <div class="hud-top"><span id="wearer-dot" class="dot ok"></span><span id="wearer-status">Iniciando cámara…</span><span class="spacer"></span><span id="wearer-state" class="state"></span></div>
+          <canvas id="wearer-canvas" width="1280" height="720"></canvas>
+          <div class="hud-top"><span id="status" class="status-pill idle"><i></i><span id="status-text">Cargando…</span></span><span id="tech" class="tech"></span></div>
+          <div id="overlay" class="overlay"></div>
           <div class="hud-bottom">
-            <div id="wearer-card" class="card-id"></div>
-            <div id="wearer-ear" class="ear"><small>AVISO AL OÍDO</small><div id="wearer-ear-text"></div><div class="bars"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div></div>
+            <div id="card" class="card-id" aria-live="polite"></div>
+            <div id="ear" class="ear">${icon('speaker', 18)}<div><small>Al oído</small><div id="ear-text"></div></div></div>
           </div>
         </div>
-        <div class="wearer-actions">
-          <button id="ask" class="btn">¿Quién es?</button>
-          <span id="mic" class="mic apagado">Micrófono apagado</span><small id="mic-error" class="mic-error"></small>
-          <span class="muted">Fuente: <b id="source-name">—</b> · En las gafas el portador no ve pantallas: sólo escucha la frase.</span>
+        <div class="controls">
+          <button id="ask" class="btn big">${icon('question', 22)}<span>¿Quién es?</span></button>
+          <button id="mic" class="mic-btn" aria-pressed="false"></button>
+          <span id="mic-hint" class="hint"></span>
+        </div>
+        <p class="footnote">En las gafas no hay pantalla: la persona sólo escucha la frase. Atajo: barra espaciadora.</p>
+      </section>
+      <section class="phone" aria-label="App del cuidador">
+        <div class="section-label">${icon('users', 16)} App del cuidador</div>
+        <div class="device"><div id="screen" class="screen"></div>
+          <nav class="tabs">${TABS.map((t) => `<button data-tab="${t.key}">${icon(t.icon, 22)}<span>${t.label}</span></button>`).join('')}</nav>
         </div>
       </section>
-      <section class="phone"><div class="device"><div class="statusbar"><span>${hhmm(Date.now())}</span><span>▮▮▮ ~ 82%</span></div><div id="screen" class="screen"></div>
-        <nav class="tabs">${(['inicio', 'circulo', 'historial', 'privacidad'] as Tab[]).map((t) =>
-          `<button data-tab="${t}"><span class="ico ico-${t}"></span>${{ inicio: 'Inicio', circulo: 'Círculo', historial: 'Historial', privacidad: 'Privacidad' }[t]}</button>`).join('')}</nav>
-      </div></section>
     </main>`;
+  }
+
+  private setView(view: 'wearer' | 'phone') {
+    $('.stage').dataset.view = view;
+    this.root.querySelectorAll<HTMLElement>('.switch button').forEach((x) => x.classList.toggle('on', x.dataset.view === view));
   }
 
   private bindShell() {
     this.root.querySelectorAll<HTMLButtonElement>('.switch button').forEach((b) =>
-      b.addEventListener('click', () => {
-        this.root.querySelectorAll('.switch button').forEach((x) => x.classList.toggle('on', x === b));
-        $('.stage').dataset.view = b.dataset.view!;
-      }));
+      b.addEventListener('click', () => this.setView(b.dataset.view as 'wearer' | 'phone')));
     this.root.querySelectorAll<HTMLButtonElement>('.tabs button').forEach((b) =>
       b.addEventListener('click', () => { this.tab = b.dataset.tab as Tab; this.renderPhone(); }));
-    const ask = () => this.ask();
-    $('#ask').addEventListener('click', ask);
+    $('#ask').addEventListener('click', () => this.ask());
+    $('#mic').addEventListener('click', async () => {
+      await this.setToggle('listen', !this.settings.listen);
+      if (this.tab === 'ajustes') await this.renderPhone();
+    });
+    $('#pause').addEventListener('click', () => this.setPaused(!this.settings.privacyMode));
+    $('#details').addEventListener('click', async () => {
+      await this.setToggle('details', !this.settings.details);
+      if (this.tab === 'ajustes') await this.renderPhone();
+    });
+    $('#overlay').addEventListener('click', (e) => {
+      const b = (e.target as HTMLElement).closest<HTMLElement>('[data-act]');
+      if (!b) return;
+      if (b.dataset.act === 'invite') this.enroll();
+      if (b.dataset.act === 'resume') this.setPaused(false);
+      if (b.dataset.act === 'retry-camera') this.startCamera();
+    });
     window.addEventListener('keydown', (e) => {
-      if (e.code === 'Space' && !(e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement)) {
+      const t = e.target as HTMLElement;
+      if (e.code === 'Space' && !['INPUT', 'TEXTAREA', 'BUTTON', 'SELECT'].includes(t.tagName)) {
         e.preventDefault();
-        ask();
+        this.ask();
       }
     });
   }
 
-  // ---------------------------------------------------------------- app del cuidador
+  // ================================================================ app del cuidador
   private async renderPhone() {
     if (this.enrolling) return;
+    this.galleryEmpty = (await gallery.list()).length === 0;
+    this.renderOverlay();
     this.root.querySelectorAll<HTMLButtonElement>('.tabs button').forEach((b) => b.classList.toggle('on', b.dataset.tab === this.tab));
     const screen = $('#screen');
-    const html = await ({
+    screen.innerHTML = await ({
       inicio: () => this.screenHome(),
       circulo: () => this.screenCircle(),
       historial: () => this.screenHistory(),
-      privacidad: () => this.screenPrivacy(),
+      ajustes: () => this.screenSettings(),
     })[this.tab]();
-    screen.innerHTML = html;
+    screen.scrollTop = 0;
     this.bindScreen(screen);
   }
 
   private async screenHome() {
-    const [ids, enc, discards] = await Promise.all([gallery.list(), history.recent(), history.discardsToday()]);
+    const [ids, enc] = await Promise.all([gallery.list(), history.recent()]);
     const today = enc.filter((e) => isToday(e.ts));
-    const avisos = today.filter((e) => e.kind === 'aviso').length;
-    const abst = today.filter((e) => e.kind === 'abstencion').length;
+    const recognized = today.filter((e) => e.kind === 'aviso').length;
+    const unknown = today.length - recognized;
+    const hour = new Date().getHours();
+    const hello = hour < 13 ? 'Buen día' : hour < 20 ? 'Buenas tardes' : 'Buenas noches';
+    const status = this.settings.privacyMode
+      ? `<p class="hero-status idle">${icon('pause', 16)} En pausa · no se captura nada</p>`
+      : `<p class="hero-status">${icon('shield', 16)} Funciona sólo en este dispositivo</p>`;
+
+    if (!ids.length) {
+      return `
+        <div class="hero"><h1>${hello}</h1>${status}</div>
+        <div class="pad">
+          <div class="onboard">
+            <h2>Empecemos</h2>
+            <ol class="steps-big">
+              <li><b>Invitá a alguien de confianza.</b><span>Un familiar, un amigo, quien los cuida.</span></li>
+              <li><b>Esa persona acepta y se saca 5 fotos.</b><span>Las fotos no se guardan: sólo un código cifrado.</span></li>
+              <li><b>Listo.</b><span>Cuando la veas, te digo al oído quién es.</span></li>
+            </ol>
+            <button class="btn block big" data-act="invite">${icon('userPlus', 20)} Agregar a la primera persona</button>
+          </div>
+        </div>`;
+    }
     return `
-      <div class="hero"><small>MNEMO · CUIDADOR</small><h1>Hola</h1><p><span class="dot ok"></span> ${esc(this.source?.name ?? 'cámara')} · todo local</p></div>
+      <div class="hero"><h1>${hello}</h1>${status}</div>
       <div class="pad">
-        <div class="stats"><div><b>${ids.length}</b><span>personas en el círculo</span></div><div><b>${avisos}</b><span>avisos hoy</span></div><div><b>${abst}</b><span>abstenciones</span></div></div>
-        <div class="panel"><div class="panel-h"><b>Encuentros de hoy</b><button class="chip" data-go="historial">Ver todo</button></div>
-          ${today.length ? today.slice(0, 5).map((e) => this.encounterRow(e, ids)).join('') : '<p class="muted small">Todavía no hubo encuentros hoy.</p>'}
-          ${discards ? `<div class="row"><span class="avatar ghost">?</span><div class="grow"><b>Sin coincidencia</b><small>${discards} ${discards === 1 ? 'rostro descartado' : 'rostros descartados'} hoy · sin registro biométrico</small></div><span class="tag ghost">Descarte</span></div>` : ''}
+        <div class="stats">
+          <div><b>${ids.length}</b><span>en el círculo</span></div>
+          <div><b>${recognized}</b><span>reconocidos hoy</span></div>
+          <div><b>${unknown}</b><span>sin reconocer hoy</span></div>
         </div>
-        <div class="note">Ninguna persona se enrola sin aceptar el consentimiento desde su propio teléfono. Las caras sin coincidencia no se guardan.</div>
-        <button class="btn block" data-act="invite" ${ids.length >= MAX_GALLERY ? 'disabled' : ''}>+ Invitar a alguien al círculo</button>
+        <div class="panel">
+          <div class="panel-h"><h3>Hoy</h3>${today.length ? '<button class="link" data-go="historial">Ver todo</button>' : ''}</div>
+          ${today.length ? this.timeline(today.slice(0, 6), ids, false) : '<p class="empty">Todavía no hubo encuentros hoy.</p>'}
+        </div>
+        <button class="btn block ghost" data-act="invite" ${ids.length >= MAX_GALLERY ? 'disabled' : ''}>${icon('userPlus', 20)} Agregar persona</button>
       </div>`;
   }
 
-  private encounterRow(e: history.Encounter, ids: gallery.Identity[]) {
-    const ident = ids.find((i) => i.id === e.identityId);
-    if (e.kind === 'desconocido') {
-      return `<div class="row"><span class="avatar ghost">?</span><div class="grow"><b>No es nadie conocido</b><small>${hhmm(e.ts)} · ${num(e.similarity)} · sin registro biométrico</small></div><span class="tag ghost">Desconocido</span></div>`;
+  /** Lista de encuentros; los no reconocidos consecutivos se agrupan en una sola fila. */
+  private timeline(list: history.Encounter[], ids: gallery.Identity[], withReport: boolean) {
+    const out: string[] = [];
+    for (let i = 0; i < list.length; i++) {
+      const e = list[i];
+      if (e.kind !== 'aviso') {
+        let j = i;
+        while (j + 1 < list.length && list[j + 1].kind !== 'aviso') j++;
+        const n = j - i + 1;
+        const label = n > 1 ? `${n} personas sin reconocer` : e.kind === 'abstencion' ? 'No estaba seguro' : 'No era nadie conocido';
+        const when = n > 1 ? `${hhmm(list[j].ts)} – ${hhmm(e.ts)}` : hhmm(e.ts);
+        out.push(this.row('?', label, n > 1 ? 'No se guardó nada de estas caras' : 'No se guardó nada de esa cara', when, 'ghost', ''));
+        i = j;
+        continue;
+      }
+      const ident = ids.find((x) => x.id === e.identityId);
+      const tech = this.settings.details ? ` · s ${num(e.similarity)} · ${Math.round(e.latencyMs)} ms` : '';
+      const report = withReport ? (e.reportedError ? '<span class="tag warn">Marcado como error</span>' : `<button class="link small" data-report="${e.ts}">¿Se equivocó?</button>`) : '';
+      out.push(ident
+        ? this.row(initials(ident.name), `${esc(ident.name)}`, `${esc(ident.relation)}${tech}`, hhmm(e.ts), '', report)
+        : this.row('·', 'Alguien del círculo', `Sin permiso para registrar el nombre${tech}`, hhmm(e.ts), 'soft', report));
     }
-    if (e.kind === 'abstencion') {
-      return `<div class="row"><span class="avatar ghost">?</span><div class="grow"><b>Candidata bajo umbral</b><small>${hhmm(e.ts)} · ${num(e.similarity)} · banda de abstención</small></div><span class="tag ghost">Abstuvo</span></div>`;
-    }
-    if (!e.identityId) {
-      return `<div class="row"><span class="avatar ghost">·</span><div class="grow"><b>Persona del círculo</b><small>${hhmm(e.ts)} · similitud ${num(e.similarity)} · sin registro de identidad autorizado</small></div><span class="tag">OK</span></div>`;
-    }
-    return `<div class="row"><span class="avatar">${initials(ident?.name ?? '?')}</span><div class="grow"><b>${esc(ident?.name ?? 'Revocada')} · ${esc(ident?.relation ?? '')}</b><small>${hhmm(e.ts)} · similitud ${num(e.similarity)} · ${Math.round(e.latencyMs)} ms${e.reportedError ? ' · <u>reportado</u>' : ''}</small></div><span class="tag">OK</span></div>`;
+    return `<div class="rows">${out.join('')}</div>`;
+  }
+
+  private row(avatar: string, title: string, sub: string, right: string, tone: string, extra: string) {
+    return `<div class="row"><span class="avatar ${tone}">${avatar}</span><div class="grow"><b>${title}</b><small>${sub}</small>${extra ? `<div class="row-extra">${extra}</div>` : ''}</div><span class="time">${right}</span></div>`;
   }
 
   private async screenCircle() {
     const ids = await gallery.list();
+    const soon = Date.now() + 30 * 24 * 3600 * 1000;
     return `
-      <div class="hero"><small>CÍRCULO DE CONFIANZA</small><h1>${ids.length} ${ids.length === 1 ? 'persona' : 'personas'}</h1><p>Hasta ${MAX_GALLERY} identidades · galería cerrada</p></div>
+      <div class="hero"><h1>Círculo de confianza</h1><p>${ids.length ? `${ids.length} ${ids.length === 1 ? 'persona' : 'personas'} · hasta ${MAX_GALLERY}` : 'Nadie todavía'}</p></div>
       <div class="pad">
-        <div class="panel">${ids.length ? ids.map((i) => `
-          <button class="row link" data-person="${i.id}"><span class="avatar">${initials(i.name)}</span><div class="grow"><b>${esc(i.name)} · ${esc(i.relation)}</b>
-          <small>${gallery.isExpired(i) ? 'consentimiento vencido' : `vence ${ddmmyyyy(i.expiresAt)}`} · ${i.validShots} tomas${gallery.isWeak(i) ? ' · baja calidad' : ''}</small></div><span class="chev">›</span></button>`).join('')
-          : '<p class="muted small">Nadie enrolado todavía.</p>'}</div>
-        <button class="btn block" data-act="invite" ${ids.length >= MAX_GALLERY ? 'disabled' : ''}>+ Invitar a alguien al círculo</button>
+        ${ids.length ? `<div class="panel rows">${ids.map((i) => {
+          const chip = gallery.isExpired(i) ? '<span class="tag warn">Venció el permiso</span>'
+            : i.expiresAt < soon ? '<span class="tag warn">Vence pronto</span>'
+            : gallery.isWeak(i) ? '<span class="tag soft">Rehacer fotos</span>' : '';
+          return `<button class="row link-row" data-person="${i.id}"><span class="avatar">${initials(i.name)}</span><div class="grow"><b>${esc(i.name)}</b><small>${esc(i.relation)}</small></div>${chip}${icon('chevron', 18)}</button>`;
+        }).join('')}</div>`
+        : `<div class="empty-block">${icon('users', 32)}<p>Agregá a las personas que la persona que usa las gafas ve seguido.</p></div>`}
+        <button class="btn block" data-act="invite" ${ids.length >= MAX_GALLERY ? 'disabled' : ''}>${icon('userPlus', 20)} Agregar persona</button>
+        <p class="footnote center">Nadie puede ser agregado sin estar presente y aceptar desde su propio teléfono.</p>
       </div>`;
   }
 
@@ -369,82 +541,127 @@ export class App {
     if (!i) return this.screenCircle();
     const enc = (await history.recent()).filter((e) => e.identityId === id);
     const errors = enc.filter((e) => e.reportedError).length;
-    const mean = enc.length ? enc.reduce((a, e) => a + e.similarity, 0) / enc.length : 0;
     return `
-      <div class="hero person"><button class="back" data-go="circulo">‹ Círculo</button><small>CÍRCULO DE CONFIANZA</small>
-        <div class="who"><span class="avatar xl">${initials(i.name)}</span><div><h1>${esc(i.name)}</h1><p>${esc(i.relation)} · enrolada el ${ddmmyyyy(i.enrolledAt)}</p></div></div></div>
+      <div class="hero person">
+        <button class="back" data-go="circulo">${icon('back', 18)} Círculo</button>
+        <div class="who"><span class="avatar xl">${initials(i.name)}</span><div><h1>${esc(i.name)}</h1><p>${esc(i.relation)}</p></div></div>
+      </div>
       <div class="pad">
-        <div class="chips"><span class="chip dark">Plantilla ${gallery.isWeak(i) ? 'baja' : 'alta'} · ${i.validShots} tomas</span><span class="chip">Vence ${ddmmyyyy(i.expiresAt)}</span><span class="chip">512-d · cifrado</span></div>
-        <div class="panel"><small class="label">AVISO AL OÍDO</small>
-          <input class="phrase" id="phrase" value="${esc(i.phrase)}" maxlength="80" />
-          <small class="muted">Frase corta, primero el nombre y después el vínculo. Editable.</small></div>
-        <div class="panel"><small class="label">NOTAS PARA CONVERSACIÓN</small>
+        <div class="panel form">
+          <label>Lo que escucha al verla
+            <div class="with-btn"><input id="phrase" value="${esc(i.phrase)}" maxlength="80" /><button class="icon-btn" data-act="preview" title="Escuchar">${icon('speaker', 18)}</button></div>
+            <small>Corta: primero el nombre y después el vínculo.</small></label>
+          <label>Vínculo<input id="relation" value="${esc(i.relation)}" maxlength="40" /></label>
           ${i.consent.notes
-            ? `<textarea id="notes" rows="4" placeholder="· Vive en Rosario, viene los martes">${esc(i.notes.join('\n'))}</textarea><input id="context" placeholder="Dato de contexto para la tarjeta (opcional)" value="${esc(i.context)}" />`
-            : '<p class="muted small">La persona no autorizó notas de conversación (consentimiento parcial).</p>'}</div>
-        <div class="panel"><small class="label">DESEMPEÑO · 7 DÍAS</small>
-          <div class="stats flat"><div><b>${enc.length}</b><span>avisos</span></div><div><b>${errors}</b><span>errores reportados</span></div><div><b>${enc.length ? num(mean) : '—'}</b><span>similitud media</span></div></div>
-          ${i.consent.encounterLog ? '' : '<small class="muted">Sin registro de encuentros: la persona no lo autorizó.</small>'}</div>
-        <button class="btn block ghost" data-act="save-person" data-id="${i.id}">Guardar cambios</button>
-        <button class="btn block ghost" data-act="regen" data-id="${i.id}">Regenerar plantilla (5 tomas nuevas)</button>
-        <button class="btn block danger" data-act="revoke" data-id="${i.id}">Revocar consentimiento y borrar</button>
+            ? `<label><span>Dato para la tarjeta <small class="inline">(opcional)</small></span><input id="context" placeholder="vive en Rosario" value="${esc(i.context)}" /></label>
+               <label>Notas para conversar<textarea id="notes" rows="3" placeholder="Viene los martes · nietos Lucía y Tomás">${esc(i.notes.join('\n'))}</textarea></label>`
+            : '<p class="muted small">No autorizó notas de conversación.</p>'}
+          <button class="btn block" data-act="save-person" data-id="${i.id}">Guardar</button>
+        </div>
+        <div class="panel">
+          <h3>Esta semana</h3>
+          <div class="stats flat"><div><b>${i.consent.encounterLog ? enc.length : '—'}</b><span>veces reconocida</span></div><div><b>${errors}</b><span>errores marcados</span></div></div>
+          ${i.consent.encounterLog ? '' : '<p class="muted small">No autorizó registrar los encuentros.</p>'}
+          <ul class="facts">
+            <li>${icon('check', 16)} Fotos: ninguna guardada · ${i.validShots} tomas${gallery.isWeak(i) ? ' (conviene rehacerlas)' : ''}</li>
+            <li>${icon('check', 16)} Permiso vigente hasta el ${ddmmyyyy(i.expiresAt)}</li>
+          </ul>
+        </div>
+        <button class="btn block ghost" data-act="regen" data-id="${i.id}">${icon('camera', 18)} Rehacer las fotos</button>
+        <button class="btn block danger" data-act="revoke" data-id="${i.id}">${icon('trash', 18)} Quitar del círculo</button>
       </div>`;
   }
 
   private async screenHistory() {
     const [enc, ids] = await Promise.all([history.recent(), gallery.list()]);
-    const av = enc.filter((e) => e.kind === 'aviso').length;
+    const days = new Map<string, history.Encounter[]>();
+    for (const e of enc) {
+      const d = new Date(e.ts);
+      const today = new Date();
+      const yest = new Date(Date.now() - 864e5);
+      const key = d.toDateString() === today.toDateString() ? 'Hoy' : d.toDateString() === yest.toDateString() ? 'Ayer'
+        : d.toLocaleDateString('es-AR', { weekday: 'long', day: 'numeric', month: 'long' });
+      days.set(key, [...(days.get(key) ?? []), e]);
+    }
     return `
-      <div class="hero"><small>HISTORIAL · ÚLTIMOS 7 DÍAS</small><h1>${av} avisos · ${enc.filter((e) => e.kind === 'abstencion').length} abstenciones</h1><p>Se borra automáticamente a los 7 días</p></div>
+      <div class="hero"><h1>Historial</h1><p>Últimos 7 días · se borra solo</p></div>
       <div class="pad">
-        <div class="panel">${enc.length ? enc.map((e) => `
-          <div class="row"><div class="grow">${this.encounterRow(e, ids)}</div>
-          ${e.kind === 'aviso' && !e.reportedError ? `<button class="chip" data-report="${e.ts}">¿Error?</button>` : ''}</div>`).join('')
-          : '<p class="muted small">Sin encuentros registrados.</p>'}</div>
-        <div class="panel"><small class="label">¿UN AVISO ESTUVO MAL?</small><p class="small">Reportalo para recalibrar el umbral y auditar falsos positivos. Usá «¿Error?» en la fila correspondiente.</p></div>
-        <div class="note">El registro guarda hora, identidad y similitud. <b>No guarda imágenes, audio ni ubicación.</b></div>
+        ${enc.length ? [...days].map(([day, list]) => `<div class="panel"><h3 class="day">${esc(day)}</h3>${this.timeline(list, ids, true)}</div>`).join('')
+          : `<div class="empty-block">${icon('clock', 32)}<p>Todavía no hay encuentros.</p></div>`}
+        <p class="footnote center">Si un aviso estuvo mal, marcalo con «¿Se equivocó?»: sirve para ajustar la seguridad.<br/>Se guarda la hora y a quién reconoció. <b>Nunca imágenes, audio ni ubicación.</b></p>
       </div>`;
   }
 
-  private async screenPrivacy() {
+  private async screenSettings() {
     const s = this.settings;
-    const c = this.pipe.engine.cfg;
     const n = (await gallery.active()).length;
+    const preset = SAFETY.find((p) => Math.abs(p.tau - s.tauHigh) < 0.005);
     const est = s.calibration ? estimate(s.calibration, s.tauHigh) : null;
-    const pct = (v: number) => `${num(v * 100, 1)} %`;
-    const pos = (v: number) => ((v - 0.2) / 0.4) * 100;
+    const per = (v: number, base: number) => (v * base < 1 ? `menos de 1 de cada ${base}` : `~${Math.round(v * base)} de cada ${base}`);
     return `
-      <div class="hero"><small>AJUSTES</small><h1>Privacidad y umbral</h1><p><span class="dot ok"></span> <span id="egress">${this.egress} conexiones salientes en esta sesión</span></p></div>
+      <div class="hero"><h1>Ajustes</h1><p>Elegí cómo y cuándo avisa</p></div>
       <div class="pad">
         <div class="panel">
-          ${this.toggle('privacyMode', 'Modo privacidad', 'Apaga cámara y avisos por completo')}
-          ${this.toggle('onDemand', 'Sólo a pedido', 'Identifica sólo al presionar «¿Quién es?» (o barra espaciadora)')}
-          ${this.toggle('voice', 'Aviso por voz', 'Voz local del sistema; si no hay voz local, no habla')}
-          ${this.toggle('announceOnChange', 'Avisar al cambiar de persona', 'Si aparece otra cara, dice quién es sin que preguntes')}
-          ${this.toggle('announceUnknown', 'Avisar si no es conocido', '«No es nadie conocido. Podés invitarlo a sumarse al círculo.»')}
-          ${this.toggle('listen', 'Escuchar «¿quién es?»', 'Micrófono abierto; Whisper transcribe en el dispositivo, el audio no sale')}
-          <small id="mic-detail" class="muted tiny"></small>
-          <label class="setting"><div><b>Cámara</b><small>La trasera, a la altura de los ojos, reemplaza a las gafas</small></div>
-            <select id="facing"><option value="user" ${s.facing === 'user' ? 'selected' : ''}>Frontal</option><option value="environment" ${s.facing === 'environment' ? 'selected' : ''}>Trasera</option></select></label>
+          <h3>¿Cuándo habla?</h3>
+          <div class="seg" data-seg="mode">
+            <button data-v="auto" class="${s.onDemand ? '' : 'on'}">Solo, al ver a alguien</button>
+            <button data-v="demand" class="${s.onDemand ? 'on' : ''}">Sólo si pregunto</button>
+          </div>
+          <div class="${s.onDemand ? 'dim' : ''}">
+            ${this.toggle('announceOnChange', 'Avisar cuando cambia la persona', 'Si llega otra persona, dice quién es.')}
+            ${this.toggle('announceUnknown', 'Avisar si no es nadie conocido', '«No es nadie conocido. Podés invitarlo a sumarse al círculo.»')}
+          </div>
         </div>
-        <div class="panel"><small class="label">UMBRAL DE DECISIÓN</small>
-          <div class="between"><span>Confirmar identidad desde</span><b>τ = ${num(s.tauHigh)}</b></div>
-          <div class="slider"><div class="band" style="left:${pos(c.tauLow)}%;width:${pos(c.tauHigh) - pos(c.tauLow)}%"></div>
-            <input type="range" id="tau" min="0.2" max="0.6" step="0.01" value="${s.tauHigh}" /></div>
-          <div class="between tiny muted"><span>0,20 permisivo</span><span>banda de abstención</span><span>0,60 estricto</span></div>
-          <div class="note">${est
-            ? `Galería actual (N = ${n}): <b>FPIR ${pct(est.fpir)} · FNIR ${pct(est.fnir)}</b> estimados con la calibración de N = ${s.calibration!.galleryN}.`
-            : `Galería actual (N = ${n}). <b>Sin calibración cargada</b>: corré <code>mnemo-eval</code> en <code>core/</code> y cargá el <code>eval_report.json</code> para ver FPIR/FNIR estimados.`}
-            Entre ${num(c.tauLow)} y ${num(c.tauHigh)} el sistema dice «no estoy seguro» antes que arriesgar un nombre.</div>
-          <label class="file">Cargar calibración (eval_report.json)<input type="file" id="calib" accept="application/json" /></label>
-          <div class="between"><span>Permanencia antes de avisar</span><b id="dwell-v">${num(s.dwellMs / 1000, 1)} s</b></div>
-          <input type="range" id="dwell" min="0" max="3000" step="100" value="${s.dwellMs}" />
+
+        <div class="panel">
+          <h3>Voz</h3>
+          ${this.toggle('voice', 'Hablar en voz alta', 'Con la voz del dispositivo, sin internet.')}
+          ${this.toggle('listen', 'Escuchar «¿Quién es?»', 'El micrófono queda abierto; lo que decís se entiende en el dispositivo y no se guarda.')}
         </div>
-        <div class="panel"><small class="label">RETENCIÓN</small>
-          <div class="between"><span>Plantillas biométricas</span><span class="muted">hasta revocación · 12 meses</span></div>
-          <div class="between"><span>Historial de encuentros</span><span class="muted">7 días</span></div>
-          <div class="between"><span>Imágenes y audio</span><b>nunca</b></div></div>
-        <div class="two"><button class="btn ghost" data-act="export">Exportar auditoría</button><button class="btn ghost danger" data-act="wipe">Borrar plantillas</button></div>
+
+        <div class="panel">
+          <h3>¿Qué tan seguro antes de decir un nombre?</h3>
+          <div class="seg" data-seg="safety">
+            ${SAFETY.map((p) => `<button data-v="${p.tau}" class="${preset?.key === p.key ? 'on' : ''}">${p.label}</button>`).join('')}
+          </div>
+          <p class="explain">${preset ? preset.text : `Ajuste personalizado (τ = ${num(s.tauHigh)}).`} Si duda, dice «no estoy seguro» en lugar de arriesgar un nombre.</p>
+          ${est ? `<p class="estimate">Con ${n} ${n === 1 ? 'persona' : 'personas'} en el círculo: nombra mal ${per(est.fpir, 1000)} veces · se queda callado ante un conocido ${per(est.fnir, 100)}.</p>` : ''}
+        </div>
+
+        <div class="panel">
+          <h3>Cámara</h3>
+          <div class="seg" data-seg="facing">
+            <button data-v="user" class="${s.facing === 'user' ? 'on' : ''}">Frontal</button>
+            <button data-v="environment" class="${s.facing === 'environment' ? 'on' : ''}">Trasera</button>
+          </div>
+          <p class="explain">En el teléfono, la trasera a la altura de los ojos simula las gafas.</p>
+        </div>
+
+        <div class="panel">
+          <h3>Privacidad</h3>
+          <ul class="facts">
+            <li>${icon('check', 16)} Fotos y audio: <b>nunca se guardan</b></li>
+            <li>${icon('check', 16)} Caras que no conoce: no se guarda nada</li>
+            <li>${icon('check', 16)} Historial: se borra a los 7 días</li>
+            <li>${icon('check', 16)} Cada persona puede retirar su permiso cuando quiera</li>
+            <li>${icon('check', 16)} Conexiones a internet en esta sesión: <b data-egress>${this.egress}</b></li>
+          </ul>
+        </div>
+
+        <details class="panel advanced">
+          <summary>Avanzado</summary><div class="adv-body">
+          ${this.toggle('details', 'Detalles técnicos', 'Muestra similitud, umbral y rendimiento. Útil para presentaciones.')}
+          <div class="between"><span>Umbral para confirmar identidad</span><b id="tau-v">τ = ${num(s.tauHigh)}</b></div>
+          <input type="range" id="tau" min="0.2" max="0.6" step="0.01" value="${s.tauHigh}" aria-label="Umbral" />
+          <p class="explain">Entre ${num(Math.max(0, s.tauHigh - ABSTAIN_BAND))} y ${num(s.tauHigh)} se abstiene («no estoy seguro»).</p>
+          <div class="between"><span>Tiempo frente a la persona antes de avisar</span><b id="dwell-v">${num(s.dwellMs / 1000, 1)} s</b></div>
+          <input type="range" id="dwell" min="0" max="3000" step="100" value="${s.dwellMs}" aria-label="Permanencia" />
+          <label class="file">${icon('download', 16)} ${s.calibration ? `Calibración cargada (N = ${s.calibration.galleryN}) · cambiar` : 'Cargar calibración (eval_report.json)'}<input type="file" id="calib" accept="application/json" /></label>
+          <div class="two">
+            <button class="btn ghost small" data-act="export">${icon('download', 16)} Auditoría</button>
+            <button class="btn ghost small danger" data-act="wipe">${icon('trash', 16)} Borrar a todos</button>
+          </div>
+        </div></details>
       </div>`;
   }
 
@@ -456,39 +673,47 @@ export class App {
     screen.querySelectorAll<HTMLElement>('[data-go]').forEach((b) =>
       b.addEventListener('click', () => { this.tab = b.dataset.go as Tab; this.renderPhone(); }));
     screen.querySelectorAll<HTMLElement>('[data-person]').forEach((b) =>
-      b.addEventListener('click', async () => { screen.innerHTML = await this.screenPerson(b.dataset.person!); this.bindScreen(screen); }));
+      b.addEventListener('click', async () => { screen.innerHTML = await this.screenPerson(b.dataset.person!); screen.scrollTop = 0; this.bindScreen(screen); }));
     screen.querySelectorAll<HTMLElement>('[data-report]').forEach((b) =>
-      b.addEventListener('click', async () => { await history.reportError(Number(b.dataset.report)); this.renderPhone(); }));
+      b.addEventListener('click', async () => {
+        await history.reportError(Number(b.dataset.report));
+        toast('Marcado. Si pasa seguido, probá la seguridad «Prudente».', 'info');
+        this.renderPhone();
+      }));
     screen.querySelectorAll<HTMLElement>('[data-act]').forEach((b) => b.addEventListener('click', () => this.act(b.dataset.act!, b.dataset.id)));
 
     screen.querySelectorAll<HTMLInputElement>('[data-setting]').forEach((inp) =>
       inp.addEventListener('change', async () => {
-        const key = inp.dataset.setting as ToggleKey;
-        this.settings[key] = inp.checked;
-        await saveSettings(this.settings);
-        this.applyDecisionSettings();
-        this.pipe.engine.reset();
-        if (key === 'privacyMode') {
-          if (inp.checked) { this.stopCamera(); this.listener.stop(); this.renderPrivacyOverlay(); }
-          else { await this.startCamera(); if (this.settings.listen) this.startListening(); }
-        }
-        if (key === 'listen') {
-          if (inp.checked && !this.settings.privacyMode) this.startListening();
-          else this.listener.stop();
-        }
+        await this.setToggle(inp.dataset.setting as ToggleKey, inp.checked);
+        if (inp.dataset.setting === 'details') this.renderPhone();
       }));
-    const facing = screen.querySelector<HTMLSelectElement>('#facing');
-    facing?.addEventListener('change', async () => {
-      this.settings.facing = facing.value as Settings['facing'];
-      await saveSettings(this.settings);
-      if (!this.settings.privacyMode) await this.startCamera();
-    });
+
+    screen.querySelectorAll<HTMLElement>('.seg').forEach((seg) =>
+      seg.addEventListener('click', async (e) => {
+        const b = (e.target as HTMLElement).closest<HTMLButtonElement>('button[data-v]');
+        if (!b) return;
+        const v = b.dataset.v!;
+        if (seg.dataset.seg === 'mode') await this.setToggle('onDemand', v === 'demand');
+        if (seg.dataset.seg === 'safety') {
+          this.settings.tauHigh = Number(v);
+          await saveSettings(this.settings);
+          this.applyDecisionSettings();
+        }
+        if (seg.dataset.seg === 'facing') {
+          this.settings.facing = v as Settings['facing'];
+          await saveSettings(this.settings);
+          if (!this.settings.privacyMode) await this.startCamera();
+        }
+        this.renderPhone();
+      }));
+
     const tau = screen.querySelector<HTMLInputElement>('#tau');
+    tau?.addEventListener('input', () => { $('#tau-v').textContent = `τ = ${num(Number(tau.value))}`; });
     tau?.addEventListener('change', async () => {
       this.settings.tauHigh = Number(tau.value);
       await saveSettings(this.settings);
       this.applyDecisionSettings();
-      this.renderPhone();
+      this.renderPhone().then(() => screen.querySelector<HTMLDetailsElement>('details.advanced')?.setAttribute('open', ''));
     });
     const dwell = screen.querySelector<HTMLInputElement>('#dwell');
     dwell?.addEventListener('input', () => { $('#dwell-v').textContent = `${num(Number(dwell.value) / 1000, 1)} s`; });
@@ -504,8 +729,9 @@ export class App {
       try {
         this.settings.calibration = await parseCalibration(await file.text(), (await gallery.active()).length);
         await saveSettings(this.settings);
+        toast('Calibración cargada', 'ok');
       } catch (e) {
-        alert(`Archivo de calibración inválido: ${(e as Error).message}`);
+        toast(`Archivo inválido: ${(e as Error).message}`, 'warn');
       }
       this.renderPhone();
     });
@@ -514,32 +740,39 @@ export class App {
   private async act(action: string, id?: string) {
     if (action === 'invite') return this.enroll();
     if (action === 'regen' && id) return this.enroll(id);
+    if (action === 'preview') return speak($<HTMLInputElement>('#phrase').value || '', true);
     if (action === 'save-person' && id) {
-      const phrase = $<HTMLInputElement>('#phrase').value.trim();
       const notes = document.querySelector<HTMLTextAreaElement>('#notes');
       const context = document.querySelector<HTMLInputElement>('#context');
       await gallery.update(id, {
-        phrase,
+        phrase: $<HTMLInputElement>('#phrase').value.trim(),
+        relation: $<HTMLInputElement>('#relation').value.trim(),
         ...(notes ? { notes: notes.value.split('\n').map((l) => l.trim()).filter(Boolean) } : {}),
         ...(context ? { context: context.value.trim() } : {}),
       });
+      toast('Guardado', 'ok');
       this.tab = 'circulo';
       return this.renderPhone();
     }
     if (action === 'revoke' && id) {
       const i = await gallery.getIdentity(id);
-      if (!confirm(`¿Revocar el consentimiento de ${i?.name}? La plantilla, las notas y sus registros se borran de forma irreversible.`)) return;
+      const ok = await confirmDialog(`¿Quitar a ${i?.name} del círculo?`,
+        'Se borran su código facial, sus notas y su historial. No se puede deshacer.', 'Quitar');
+      if (!ok) return;
       await gallery.revoke(id);
       await history.forgetIdentity(id);
       this.pipe.engine.reset();
+      toast(`${i?.name} ya no está en el círculo`, 'ok');
       this.tab = 'circulo';
       return this.renderPhone();
     }
     if (action === 'wipe') {
-      if (!confirm('¿Borrar TODAS las plantillas? Es irreversible.')) return;
+      const ok = await confirmDialog('¿Borrar a todas las personas?', 'Se eliminan todos los códigos faciales y su historial. No se puede deshacer.', 'Borrar todo');
+      if (!ok) return;
       for (const i of await gallery.list()) await history.forgetIdentity(i.id);
       await gallery.wipeAll();
       this.pipe.engine.reset();
+      toast('Círculo vacío', 'ok');
       return this.renderPhone();
     }
     if (action === 'export') {
@@ -552,73 +785,84 @@ export class App {
     }
   }
 
-  // ---------------------------------------------------------------- alta con consentimiento (CU-01)
-  private async enroll(replaceId?: string) {
-    if (!this.source || this.settings.privacyMode) {
-      alert('Desactivá el modo privacidad para enrolar: la captura guiada necesita la cámara.');
+  // ================================================================ alta con consentimiento (CU-01)
+  private wizard(step: number, title: string, body: string, opts: { dark?: boolean } = {}) {
+    const names = ['Invitación', 'Permiso', 'Fotos', 'Datos'];
+    return `
+      <div class="wizard ${opts.dark ? 'dark' : ''}">
+        <div class="wiz-top">
+          <button class="icon-btn" id="wiz-close" aria-label="Cancelar">${icon('x', 20)}</button>
+          <ol class="wiz-steps">${names.map((n, i) => `<li class="${i < step ? 'done' : i === step ? 'on' : ''}"><i></i><span>${n}</span></li>`).join('')}</ol>
+        </div>
+        <h1 class="wiz-title">${title}</h1>
+        ${body}
+      </div>`;
+  }
+
+  private async enroll(replaceId?: string): Promise<void> {
+    if (!this.source || this.settings.privacyMode || this.cameraError) {
+      toast(this.settings.privacyMode ? 'Reanudá la cámara para agregar a alguien.' : 'Se necesita la cámara para las fotos.', 'warn');
       return;
     }
     this.enrolling = true;
-    $('.stage').dataset.view = 'phone';
-    this.root.querySelectorAll('.switch button').forEach((x) => x.classList.toggle('on', (x as HTMLElement).dataset.view === 'phone'));
+    this.renderOverlay();
+    this.setStatus('Agregando a alguien al círculo…', 'idle');
+    $('#card').innerHTML = '';
+    this.setView('phone');
     const screen = $('#screen');
+    screen.scrollTop = 0;
     const replacing = replaceId ? await gallery.getIdentity(replaceId) : undefined;
+    let cancelled = false;
     const finish = async () => {
       this.enrolling = false;
       this.pipe.engine.reset();
       await this.renderPhone();
     };
+    const bindClose = (onClose: () => void) => { $('#wiz-close', screen).onclick = onClose; };
 
     // P-02 · Invitación
     const code = Array.from(crypto.getRandomValues(new Uint8Array(3)), (b) => b.toString(16).padStart(2, '0')).join('').toUpperCase();
-    screen.innerHTML = `
-      <div class="hero"><small>PASO 1 DE 3 · INVITACIÓN</small><h1>${replacing ? `Renovar a ${esc(replacing.name)}` : 'Invitar al círculo'}</h1><p>El alta la completa la persona invitada</p></div>
-      <div class="pad">
-        <div class="panel center"><div class="qr">${fakeQr(code)}</div><b>Código de un solo uso · MN-${code}</b><small class="muted">Vence en ${ENROLLMENT.inviteTtlHours} horas y sirve una sola vez</small></div>
-        <div class="panel"><small class="label">QUÉ VA A PASAR</small>
-          <ol class="steps"><li>Lee y acepta el consentimiento en <b>su</b> dispositivo.</li><li>Toma 5 fotos guiadas; se convierten en un vector de 512 números y las imágenes se descartan.</li><li>La plantilla queda cifrada en el dispositivo del portador y sólo ahí.</li></ol></div>
-        <div class="note"><b>Demo web:</b> el alta ocurre en este mismo navegador. En la app real el invitado escanea el QR y todo el flujo corre en su teléfono.</div>
-        <button class="btn block" id="go">Continuar como la persona invitada</button>
-        <button class="btn block ghost" id="cancel">Cancelar</button>
-      </div>`;
-    const step1 = await new Promise<boolean>((r) => {
-      $('#go', screen).onclick = () => r(true);
-      $('#cancel', screen).onclick = () => r(false);
-    });
+    screen.innerHTML = this.wizard(0, replacing ? `Rehacer las fotos de ${esc(replacing.name)}` : 'Invitá a alguien de confianza', `
+      <div class="panel center"><div class="qr">${fakeQr(code)}</div><b>MN-${code}</b><small class="muted">Sirve una sola vez y vence en ${ENROLLMENT.inviteTtlHours} h</small></div>
+      <ol class="steps-big">
+        <li><b>La persona escanea el código con su teléfono.</b></li>
+        <li><b>Lee y acepta el permiso.</b><span>Decide qué comparte.</span></li>
+        <li><b>Se saca 5 fotos guiadas.</b><span>Las fotos se borran al instante; queda sólo un código cifrado.</span></li>
+      </ol>
+      <p class="note">En esta demo, el alta se hace en este mismo navegador.</p>
+      <button class="btn block big" id="go">Continuar</button>`);
+    const step1 = await new Promise<boolean>((r) => { $('#go', screen).onclick = () => r(true); bindClose(() => r(false)); });
     if (!step1) return finish();
 
     // P-04 · Consentimiento (antecede a la captura)
-    screen.innerHTML = `
-      <div class="hero"><small>PASO 2 DE 3 · CONSENTIMIENTO</small><h1>Tu cara, tus reglas</h1><p>Leé antes de aceptar</p></div>
-      <div class="pad">
-        <div class="panel legal">
-          <p><b>Finalidad.</b> Ayudar a quien usa las gafas a recordar quién sos cuando se encuentran, mediante un aviso privado por el auricular.</p>
-          <p><b>Qué se guarda.</b> Un vector numérico (plantilla biométrica) derivado de tu rostro, cifrado en el almacén seguro del dispositivo. <b>No se guardan fotos ni video.</b></p>
-          <p><b>Dónde se procesa.</b> Todo el reconocimiento ocurre en el dispositivo, sin enviar datos a servidores ni a terceros.</p>
-          <p><b>Quién accede.</b> El portador y su cuidador/a. Nadie más.</p>
-          <p><b>Plazo.</b> Tu autorización vence en 12 meses y se te vuelve a pedir.</p>
-          <p><b>Revocación.</b> Podés revocarla cuando quieras; la plantilla se borra de forma irreversible.</p>
-        </div>
-        <div class="panel">
-          <label class="setting"><div><b>Uso de mi rostro para que me nombre</b><small>Nombre y vínculo al oído</small></div><input type="checkbox" class="switch-input" id="c-id" checked /></label>
-          <label class="setting"><div><b>Notas de conversación</b><small>Ej.: «vive en Rosario»</small></div><input type="checkbox" class="switch-input" id="c-notes" checked /></label>
-          <label class="setting"><div><b>Registro de nuestros encuentros</b><small>7 días, sin imágenes</small></div><input type="checkbox" class="switch-input" id="c-log" /></label>
-        </div>
-        <button class="btn block" id="accept">Acepto y me enrolo</button>
-        <button class="btn block ghost" id="decline">No, gracias</button>
-        <small class="muted tiny center-t">Ley 25.326, arts. 4, 5 y 9 · consentimiento libre, expreso e informado</small>
-      </div>`;
+    screen.innerHTML = this.wizard(1, 'Tu cara, tus reglas', `
+      <ul class="consent">
+        <li>${icon('glasses', 20)}<div><b>Para qué</b><span>Para que quien usa las gafas escuche tu nombre cuando te encuentre.</span></div></li>
+        <li>${icon('shield', 20)}<div><b>Qué se guarda</b><span>Un código numérico cifrado a partir de tu cara. <b>Ninguna foto ni video.</b></span></div></li>
+        <li>${icon('sparkle', 20)}<div><b>Dónde</b><span>Sólo en el dispositivo de quien usa las gafas. Nada va a internet.</span></div></li>
+        <li>${icon('clock', 20)}<div><b>Por cuánto tiempo</b><span>12 meses. Podés retirarlo cuando quieras y se borra todo.</span></div></li>
+      </ul>
+      <div class="panel">
+        <label class="setting"><div><b>Que me nombre al verme</b><small>Necesario para sumarte</small></div><input type="checkbox" class="switch-input" id="c-id" checked /></label>
+        <label class="setting"><div><b>Notas para conversar</b><small>Ej.: «vive en Rosario»</small></div><input type="checkbox" class="switch-input" id="c-notes" checked /></label>
+        <label class="setting"><div><b>Registrar cuándo nos vemos</b><small>7 días, sin imágenes</small></div><input type="checkbox" class="switch-input" id="c-log" /></label>
+      </div>
+      <button class="btn block big" id="accept">Acepto</button>
+      <button class="btn block ghost" id="decline">No, gracias</button>
+      <p class="footnote center">Ley 25.326 · consentimiento libre, expreso e informado</p>`);
+    const idBox = $<HTMLInputElement>('#c-id', screen);
+    idBox.onchange = () => { $<HTMLButtonElement>('#accept', screen).disabled = !idBox.checked; };
     const consent = await new Promise<gallery.Consent | null>((r) => {
       $('#accept', screen).onclick = () => r({
-        identification: $<HTMLInputElement>('#c-id', screen).checked,
+        identification: idBox.checked,
         notes: $<HTMLInputElement>('#c-notes', screen).checked,
         encounterLog: $<HTMLInputElement>('#c-log', screen).checked,
       });
       $('#decline', screen).onclick = () => r(null);
+      bindClose(() => { cancelled = true; r(null); });
     });
-    if (!consent || !consent.identification) {
-      // CU-01 A1: no se captura ninguna imagen y la invitación se invalida.
-      alert('Rechazado: no se capturó ninguna imagen y la invitación quedó invalidada.');
+    if (!consent) {
+      if (!cancelled) toast('No se tomó ninguna foto y la invitación quedó anulada.', 'info', 4500);
       return finish();
     }
 
@@ -626,7 +870,7 @@ export class App {
     const vecs = await this.guidedCapture(screen);
     if (!vecs) return finish();
     if (!vecs.length) {
-      alert('No hubo tomas válidas: no se creó ninguna plantilla.');
+      toast('No se logró ninguna foto válida. Probá con más luz.', 'warn', 4500);
       return finish();
     }
     const template = centroid(vecs);
@@ -638,100 +882,129 @@ export class App {
         name: replacing.name, relation: replacing.relation, phrase: replacing.phrase, context: replacing.context,
         template, consent, validShots: this.lastValidShots,
       });
+      toast(`Fotos de ${replacing.name} actualizadas`, 'ok');
       return finish();
     }
 
-    // P-05 · Ficha (completa el cuidador)
-    screen.innerHTML = `
-      <div class="hero"><small>FICHA NUEVA</small><h1>¿Quién es?</h1><p>Lo completa el cuidador</p></div>
-      <div class="pad"><div class="panel form">
-        <label>Nombre<input id="f-name" placeholder="Marta" required /></label>
-        <label>Vínculo<input id="f-rel" placeholder="tu hija" required /></label>
-        <label>Frase del aviso<input id="f-phrase" placeholder="Es Marta, tu hija." /></label>
-        ${consent.notes ? '<label>Dato de contexto (opcional)<input id="f-ctx" placeholder="vive en Rosario" /></label>' : '<small class="muted">Consentimiento parcial: la ficha queda sin notas.</small>'}
-      </div><button class="btn block" id="save">Guardar en el círculo</button></div>`;
+    // P-05 · Datos (los completa el cuidador)
+    screen.innerHTML = this.wizard(3, '¿Quién es?', `
+      <div class="panel form">
+        <label>Nombre<input id="f-name" placeholder="Marta" autocomplete="off" /></label>
+        <label>Vínculo con quien usa las gafas<input id="f-rel" placeholder="tu hija" autocomplete="off" /></label>
+        <label>Lo que va a escuchar
+          <div class="with-btn"><input id="f-phrase" placeholder="Es Marta, tu hija." /><button class="icon-btn" id="f-play" title="Escuchar">${icon('speaker', 18)}</button></div>
+          <small>Se completa sola; podés cambiarla.</small></label>
+        ${consent.notes ? '<label><span>Dato para la tarjeta <small class="inline">(opcional)</small></span><input id="f-ctx" placeholder="vive en Rosario" /></label>' : ''}
+      </div>
+      <button class="btn block big" id="save" disabled>Guardar</button>`);
     const name = $<HTMLInputElement>('#f-name', screen);
     const rel = $<HTMLInputElement>('#f-rel', screen);
     const phrase = $<HTMLInputElement>('#f-phrase', screen);
-    const sync = () => { phrase.placeholder = `Es ${name.value || 'Marta'}, ${rel.value || 'tu hija'}.`; };
+    const save = $<HTMLButtonElement>('#save', screen);
+    const sync = () => {
+      phrase.placeholder = `Es ${name.value.trim() || 'Marta'}, ${rel.value.trim() || 'tu hija'}.`;
+      save.disabled = !name.value.trim() || !rel.value.trim();
+    };
     name.oninput = rel.oninput = sync;
-    await new Promise<void>((r) => {
-      $('#save', screen).onclick = () => {
-        if (!name.value.trim() || !rel.value.trim()) { name.focus(); return; }
-        r();
-      };
-    });
-    await gallery.enroll({
+    $('#f-play', screen).onclick = () => speak(phrase.value.trim() || phrase.placeholder, true);
+    name.focus();
+    const saved = await new Promise<boolean>((r) => { save.onclick = () => r(true); bindClose(() => r(false)); });
+    if (!saved) return finish();
+    const ident = await gallery.enroll({
       name: name.value.trim(), relation: rel.value.trim(), phrase: phrase.value.trim() || undefined,
       context: document.querySelector<HTMLInputElement>('#f-ctx')?.value.trim(), template, consent,
       validShots: this.lastValidShots,
     });
-    this.tab = 'circulo';
-    return finish();
+
+    // Listo
+    screen.innerHTML = `
+      <div class="wizard done">
+        <div class="done-mark">${icon('check', 40)}</div>
+        <h1 class="wiz-title">${esc(ident.name)} ya está en el círculo</h1>
+        <p class="explain center">La próxima vez que aparezca frente a la cámara vas a escuchar:</p>
+        <p class="quote">«${esc(ident.phrase)}»</p>
+        <button class="btn block big" id="try">${icon('glasses', 20)} Probarlo ahora</button>
+        <button class="btn block ghost" id="another">${icon('userPlus', 20)} Agregar otra persona</button>
+      </div>`;
+    const next = await new Promise<'try' | 'another'>((r) => {
+      $('#try', screen).onclick = () => r('try');
+      $('#another', screen).onclick = () => r('another');
+    });
+    this.tab = 'inicio';
+    await finish();
+    if (next === 'another') return this.enroll();
+    this.setView('wearer');
   }
 
   private lastValidShots = 0;
 
-  /** Cinco tomas guiadas con verificación de detección, tamaño y nitidez. Devuelve vectores o null si se cancela. */
+  /** Cinco tomas guiadas con verificación de detección, tamaño, nitidez y pose. Devuelve vectores o null si se cancela. */
   private async guidedCapture(screen: HTMLElement): Promise<Float32Array[] | null> {
     const shots = ENROLLMENT.shots;
-    screen.innerHTML = `
-      <div class="capture">
-        <small class="cap-h">PASO 3 DE 3 · CAPTURA GUIADA</small>
-        <div class="cap-view"><canvas id="cap-canvas"></canvas><div class="oval"></div></div>
-        <h2 id="cap-hint">${shots[0].hint}</h2><p id="cap-sub" class="muted">Toma 1 de 5</p>
-        <div class="shots">${shots.map((s, k) => `<div class="shot" data-k="${k}"><span>○</span>${s.label}</div>`).join('')}</div>
-        <div class="two"><button class="btn ghost" id="skip">Omitir toma</button><button class="btn ghost" id="abort">Cancelar</button></div>
-        <div class="note dark">Las fotos <b>no se guardan</b>. Cada toma produce un vector de 512 números; la imagen se borra de la memoria al instante.</div>
-      </div>`;
+    screen.innerHTML = this.wizard(2, 'Fotos guiadas', `
+      <div class="cap-view"><canvas id="cap-canvas"></canvas><svg class="ring" viewBox="0 0 100 100"><circle cx="50" cy="50" r="46"/><circle id="ring" cx="50" cy="50" r="46"/></svg></div>
+      <h2 id="cap-hint" class="cap-hint">${shots[0].hint}</h2>
+      <p id="cap-sub" class="cap-sub">Buscando tu cara…</p>
+      <ol class="shots">${shots.map((s, k) => `<li class="shot" data-k="${k}"><i></i><span>${s.label}</span></li>`).join('')}</ol>
+      <button class="btn block ghost" id="skip">Saltear esta foto</button>
+      <p class="footnote center">Las fotos <b>no se guardan</b>: cada una se convierte en un código y se borra al instante.</p>`, { dark: true });
     const canvas = $<HTMLCanvasElement>('#cap-canvas', screen);
+    const ring = screen.querySelector<SVGCircleElement>('#ring')!;
+    const C = 2 * Math.PI * 46;
+    ring.style.strokeDasharray = `${C}`;
+    const setRing = (f: number) => { ring.style.strokeDashoffset = `${C * (1 - f)}`; };
+    setRing(0);
     const vecs: Float32Array[] = [];
-    let k = 0, stable = 0, skip = false, abort = false, firstProfileSign = 0;
+    let k = 0, stable = 0, skip = false, abort = false, firstProfileSign = 0, shotStart = performance.now();
+    const NEED = 4;
     $('#skip', screen).onclick = () => { skip = true; };
-    $('#abort', screen).onclick = () => { abort = true; };
-    const mark = (i: number, ok: boolean) => {
-      const el = screen.querySelector(`.shot[data-k="${i}"]`)!;
-      el.classList.add(ok ? 'ok' : 'skipped');
-      el.querySelector('span')!.textContent = ok ? '✓' : '–';
-    };
+    $('#wiz-close', screen).onclick = () => { abort = true; };
+    const mark = (i: number, ok: boolean) => screen.querySelector(`.shot[data-k="${i}"]`)!.classList.add(ok ? 'ok' : 'skipped');
     const frame = document.createElement('canvas');
 
     while (k < shots.length) {
       if (abort) return null;
       screen.querySelectorAll('.shot').forEach((el, i) => el.classList.toggle('on', i === k));
       $('#cap-hint', screen).textContent = shots[k].hint;
-      if (skip) { mark(k, false); k++; skip = false; stable = 0; continue; }
-      if (!this.source.grab(frame)) { await new Promise((r) => requestAnimationFrame(r)); continue; }
+      $('#skip', screen).classList.toggle('emph', performance.now() - shotStart > 7000);
+      if (skip) { mark(k, false); k++; skip = false; stable = 0; setRing(0); shotStart = performance.now(); continue; }
+      if (!this.source!.grab(frame)) { await new Promise((r) => requestAnimationFrame(r)); continue; }
       const isProfile = shots[k].key.startsWith('perfil');
       const a = await this.pipe.analyze(frame, { allowProfile: isProfile });
-      drawFrame(canvas, frame, a.face ? { face: a.face, quality: a.quality, zone: a.quality?.ok ? 'match' : 'reject' } as FrameResult : null, this.settings.facing === 'user');
+      drawFrame(canvas, frame, a.face ? { face: a.face, quality: a.quality, zone: a.quality?.ok ? 'match' : 'reject', sMax: -1 } as FrameResult : null,
+        this.settings.facing === 'user', this.settings.details);
 
-      let why = a.face ? a.quality!.reason : 'no se detecta un rostro';
+      let why = a.face ? (a.quality!.reason ? FRIENDLY[a.quality!.reason] ?? a.quality!.reason : null) : 'No veo tu cara';
       if (!why && a.face) {
         const yaw = a.quality!.yaw;
-        if (!isProfile && Math.abs(yaw) > 0.2) why = 'mirá de frente';
+        if (!isProfile && Math.abs(yaw) > 0.2) why = 'Mirá de frente a la cámara';
         if (isProfile) {
-          if (Math.abs(yaw) < 0.15) why = 'girá un poco más';
-          else if (firstProfileSign && Math.sign(yaw) === firstProfileSign) why = 'ahora hacia el otro lado';
+          if (Math.abs(yaw) < 0.15) why = 'Girá un poco más';
+          else if (firstProfileSign && Math.sign(yaw) === firstProfileSign) why = 'Ahora hacia el otro lado';
         }
       }
-      if (a.faces > 1) why = 'sólo una persona frente a la cámara';
-      $('#cap-sub', screen).textContent = why ? `Toma ${k + 1} de 5 · ${why}` : `Toma ${k + 1} de 5 · mantené la posición`;
+      if (a.faces > 1) why = 'Que haya una sola persona frente a la cámara';
       stable = why || !a.embedding ? 0 : stable + 1;
-      if (stable >= 3 && a.embedding) {
+      setRing(stable / NEED);
+      $('#cap-sub', screen).textContent = why ?? '¡Así! Quedate quieto…';
+      $('#cap-sub', screen).classList.toggle('good', !why);
+      if (stable >= NEED && a.embedding) {
         vecs.push(a.embedding);
         if (isProfile && !firstProfileSign) firstProfileSign = Math.sign(a.quality!.yaw);
         mark(k, true);
         k++;
         stable = 0;
-        await new Promise((r) => setTimeout(r, 500));
+        shotStart = performance.now();
+        $('#cap-sub', screen).textContent = k < shots.length ? '¡Lista!' : '¡Terminamos!';
+        await new Promise((r) => setTimeout(r, 600));
+        setRing(0);
       }
       await new Promise((r) => requestAnimationFrame(r));
     }
     frame.width = frame.height = 0;
     this.lastValidShots = vecs.length;
     if (vecs.length && vecs.length < ENROLLMENT.minValidShots) {
-      alert(`Sólo ${vecs.length} tomas válidas: la plantilla se marca de baja calidad y su umbral se eleva (CU-01 A2).`);
+      toast(`Sólo ${vecs.length} fotos válidas: va a reconocer con más cautela. Podés rehacerlas después.`, 'warn', 5000);
     }
     return vecs;
   }

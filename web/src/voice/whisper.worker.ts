@@ -20,7 +20,16 @@ let asr: Promise<Asr> | null = null;
 
 const load = async () => {
   await staleCache;
-  asr ??= (pipeline('automatic-speech-recognition', 'whisper-base', { dtype: 'q8', device: 'wasm' }) as unknown as Promise<Asr>)
+  // Progreso agregado de la descarga del modelo (~77 MB), para mostrarlo en la interfaz.
+  const files = new Map<string, { loaded: number; total: number }>();
+  const progress_callback = (p: { status: string; file?: string; loaded?: number; total?: number }) => {
+    if (p.status !== 'progress' || !p.file || !p.total) return;
+    files.set(p.file, { loaded: p.loaded ?? 0, total: p.total });
+    let loaded = 0, total = 0;
+    for (const f of files.values()) { loaded += f.loaded; total += f.total; }
+    self.postMessage({ type: 'progress', pct: Math.round((100 * loaded) / total) });
+  };
+  asr ??= (pipeline('automatic-speech-recognition', 'whisper-base', { dtype: 'q8', device: 'wasm', progress_callback }) as unknown as Promise<Asr>)
     .catch((err) => {
       asr = null; // no quedar atado a un fallo (p. ej. modelo aún no copiado): el próximo intento recarga
       throw err;

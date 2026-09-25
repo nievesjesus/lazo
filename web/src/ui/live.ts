@@ -1,15 +1,16 @@
-// P-07 / P-08 · Vista del portador. Dibuja el cuadro, el recuadro de detección, los cinco puntos
-// y las tarjetas de afirmación o abstención. En las gafas sin display sólo existe el audio.
+// P-07 / P-08 · Vista del portador. Por defecto: un marco suave alrededor de la cara. Con «detalles
+// técnicos»: recuadro de detección, cinco puntos y etiqueta de calidad (para la presentación).
 import type { FrameResult } from '../pipeline/pipeline';
 import { num } from './util';
 
-const COLORS = { match: '#ffffff', abstain: '#e8c872', reject: '#9a9a9a' } as const;
+const COLORS = { match: '#ffffff', abstain: '#f0c96a', reject: '#b9b9b9' } as const;
 
 export function drawFrame(
   canvas: HTMLCanvasElement,
   frame: HTMLCanvasElement,
   res: FrameResult | null,
   mirror: boolean,
+  details = false,
 ) {
   canvas.width = frame.width;
   canvas.height = frame.height;
@@ -21,12 +22,6 @@ export function drawFrame(
   }
   ctx.drawImage(frame, 0, 0);
   ctx.restore();
-  // Viñeta inferior para legibilidad de las tarjetas.
-  const g = ctx.createLinearGradient(0, canvas.height * 0.55, 0, canvas.height);
-  g.addColorStop(0, 'rgba(0,0,0,0)');
-  g.addColorStop(1, 'rgba(0,0,0,0.65)');
-  ctx.fillStyle = g;
-  ctx.fillRect(0, 0, canvas.width, canvas.height);
 
   if (!res?.face) return;
   const f = res.face;
@@ -34,8 +29,25 @@ export function drawFrame(
   const x1 = Math.min(fx(f.box[0]), fx(f.box[2]));
   const x2 = Math.max(fx(f.box[0]), fx(f.box[2]));
   const [, y1, , y2] = f.box;
-  const color = res.zone ? COLORS[res.zone] : '#cfcfcf';
+  const color = res.zone ? COLORS[res.zone] : 'rgba(255,255,255,0.85)';
   const unit = Math.max(1.5, canvas.width / 640);
+
+  if (!details) {
+    // Esquinas redondeadas: indican «estoy mirando esta cara» sin datos técnicos.
+    const w = x2 - x1, h = y2 - y1, pad = 0.08 * w;
+    const L = Math.min(w, h) * 0.22;
+    const [a, b, c, d] = [x1 - pad, y1 - pad, x2 + pad, y2 + pad];
+    ctx.strokeStyle = color;
+    ctx.lineWidth = 3 * unit;
+    ctx.lineCap = 'round';
+    ctx.beginPath();
+    for (const [px, py, dx, dy] of [[a, b, 1, 1], [c, b, -1, 1], [a, d, 1, -1], [c, d, -1, -1]] as const) {
+      ctx.moveTo(px, py + dy * L);
+      ctx.quadraticCurveTo(px, py, px + dx * L, py);
+    }
+    ctx.stroke();
+    return;
+  }
 
   ctx.lineWidth = 2 * unit;
   ctx.strokeStyle = color;
@@ -48,14 +60,13 @@ export function drawFrame(
     ctx.arc(fx(x), y, 3 * unit, 0, Math.PI * 2);
     ctx.fill();
   }
-
   let label = `rostro ${num(f.score)}`;
   if (res.quality && !res.quality.ok) label += ` · ${res.quality.reason}`;
-  else if (res.quality) label += ` · nítido · 112×112`;
+  else if (res.sMax > -1) label += ` · s = ${num(res.sMax)}`;
   ctx.font = `600 ${12 * unit}px ui-sans-serif, system-ui, sans-serif`;
   const tw = ctx.measureText(label).width + 12 * unit;
   const th = 20 * unit;
-  ctx.fillStyle = res.zone === 'abstain' ? '#d9d9d9' : '#ffffff';
+  ctx.fillStyle = '#ffffff';
   ctx.fillRect(x1, y1 - th, tw, th);
   ctx.fillStyle = '#111';
   ctx.fillText(label, x1 + 6 * unit, y1 - 6 * unit);

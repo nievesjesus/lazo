@@ -50,7 +50,7 @@ const external = new Set();
 rmSync(join(DIR, 'profile'), { recursive: true, force: true });
 
 await withCamera('marta', async (p) => {
-  await p.click('text=+ Invitar a alguien al círculo');
+  await p.click('#screen [data-act=invite]');
   await p.click('#go');
   await p.click('#accept');
   for (let i = 0; i < 200; i++) {
@@ -63,6 +63,7 @@ await withCamera('marta', async (p) => {
   await p.fill('#f-rel', 'tu hija');
   await p.fill('#f-ctx', 'vive en Rosario');
   await p.click('#save');
+  await p.click('#try'); // pantalla «¡Listo!» → probarlo ahora
   await p.waitForFunction(() => window.__spoken.length > 0, null, { timeout: 30000 });
   const spoken = await p.evaluate(() => window.__spoken);
   assert(spoken[0] === 'Es Marta, tu hija.', `reconoce a la persona enrolada (${JSON.stringify(spoken)})`);
@@ -85,12 +86,12 @@ await withCamera('change', async (p) => {
 });
 
 await withCamera('marta', async (p) => {
-  await p.click('.tabs button[data-tab=privacidad]');
-  await p.click('[data-setting=onDemand]');
-  await p.click('[data-setting=listen]');
+  await p.click('.tabs button[data-tab=ajustes]');
+  await p.click('.seg[data-seg=mode] button[data-v=demand]');
+  await p.click('#mic');
   await p.waitForFunction(() => window.__spoken.length > 0, null, { timeout: 90000 });
   const spoken = await p.evaluate(() => window.__spoken);
-  const heard = await p.getAttribute('#mic', 'title');
+  const heard = await p.textContent('#mic-hint');
   assert(spoken[0] === 'Es Marta, tu hija.', `responde a «¿Quién es?» por voz (oyó ${heard}; dijo ${JSON.stringify(spoken)})`);
   await p.screenshot({ path: join(DIR, 'voz.png') });
 }, 'quien.wav');

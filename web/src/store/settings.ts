@@ -19,6 +19,7 @@ export interface Settings {
   announceOnChange: boolean; // al cambiar de persona, avisar sin que pregunten
   announceUnknown: boolean;  // decir «no es nadie conocido» sin que pregunten
   listen: boolean;           // micrófono abierto para «¿quién es?» (Whisper local)
+  details: boolean;          // mostrar datos técnicos (similitud, τ, fps) — útil para presentar
   calibration: Calibration | null;
 }
 
@@ -32,6 +33,7 @@ export const DEFAULTS: Settings = {
   announceOnChange: DEFAULT_DECISION.announceOnChange,
   announceUnknown: DEFAULT_DECISION.announceUnknown,
   listen: false,
+  details: false,
   calibration: null,
 };
 
