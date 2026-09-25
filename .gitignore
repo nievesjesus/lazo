@@ -7,3 +7,4 @@ models/whisper-*/
 eval_report.json
 .DS_Store
 web/public/group-test.jpg
+data/
