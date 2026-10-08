@@ -11,6 +11,34 @@ El mismo pipeline de ocho etapas (figura 7 de la pre-entrega) está implementado
 | [`web/`](web) | Demo web con webcam o cámara del teléfono. Vista del portador (P-07/P-08) y app del cuidador (P-01 a P-09), todo en el navegador | Unit + e2e OK en Chrome headless. Paridad con Python: coseno ≥ 0,995 por rostro |
 | [`android/`](android) | App Android con la **interfaz de captura abstracta**: cámara del teléfono (CameraX), **Ray-Ban Meta** (Meta Wearables DAT 1.0) y gafas simuladas (MockDeviceKit) | Escrita contra la API del sample oficial; **todavía no compilada** (ver limitaciones) |
 
+## Inicio rápido
+
+Requisitos: Node ≥ 20.19 (ver `.nvmrc`), [uv](https://docs.astral.sh/uv/) y, para las pruebas e2e, Google Chrome. Primero instalá todo (entorno Python, dependencias web y modelos):
+
+```bash
+make setup
+```
+
+Después levantá el demo:
+
+```bash
+make dev
+```
+
+Queda en http://localhost:5173.
+
+| Tarea | Qué hace |
+|---|---|
+| `make` | Lista todas las tareas |
+| `make doctor` | Verifica herramientas y modelos |
+| `make dev` / `make dev-phone` | Demo web en local / por HTTPS para abrir desde el celular |
+| `make live` | Banco de pruebas Python con la webcam (`ARGS="--listen"` para la voz) |
+| `make enroll NAME=Marta REL="tu hija"` | Alta desde Python |
+| `make test` · `make e2e` · `make check` | Tests unitarios · e2e con cámara y micrófono falsos · todo antes de un commit |
+| `make eval` | Evaluación FPIR/FNIR sobre LFW y gráficos en `docs/eval/` |
+| `make android` | Abre la app en Android Studio |
+| `make clean` / `make distclean` | Limpia builds / deja el repo como recién clonado |
+
 Modelos: `buffalo_sc` de InsightFace, que incluye RetinaFace-500MF (detección + 5 puntos) y MobileFaceNet/ArcFace (embedding de 512-d), unos 16 MB. Para la escucha por voz del demo web se suma Whisper base en ONNX cuantizado, unos 77 MB.
 
 ```bash
