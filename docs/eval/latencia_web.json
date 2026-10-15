@@ -1,0 +1,427 @@
+{
+  "entorno": {
+    "cpu": "Apple M4",
+    "sistema": "darwin 27.0.0",
+    "chrome": "155.0.8059.40",
+    "carga_inicial": [
+      5.47412109375,
+      7.90966796875,
+      12.4912109375
+    ],
+    "carga_final": [
+      9.35400390625,
+      8.20361328125,
+      12.21728515625
+    ]
+  },
+  "variantes": [
+    {
+      "variante": "aislado (COOP/COEP) · 1280×720",
+      "cuadro": "1280×720",
+      "crossOriginIsolated": true,
+      "hilos_wasm": 4,
+      "hardwareConcurrency": 10,
+      "carga_modelos_ms": 70.04499998688698,
+      "galeria": 50,
+      "cuadros_medidos": 200,
+      "cuadros_descartados_warmup": 10,
+      "etapas_ms": {
+        "preproceso": {
+          "n": 200,
+          "p50": 18.63000001013279,
+          "p95": 20.055249978601932,
+          "media": 18.50870000034571,
+          "min": 15.774999976158142,
+          "max": 20.724999994039536
+        },
+        "deteccion": {
+          "n": 200,
+          "p50": 19.752499997615814,
+          "p95": 24.60124999731778,
+          "media": 20.274224999696017,
+          "min": 17.729999989271164,
+          "max": 30.71500000357628
+        },
+        "alineacion": {
+          "n": 200,
+          "p50": 0.5049999952316284,
+          "p95": 1.2307499900460241,
+          "media": 0.5657249996066094,
+          "min": 0.41999998688697815,
+          "max": 1.6749999821186066
+        },
+        "embedding": {
+          "n": 200,
+          "p50": 9.897499978542328,
+          "p95": 11.120999997854224,
+          "media": 9.736700000464916,
+          "min": 7.314999997615814,
+          "max": 14.555000007152557
+        },
+        "busqueda": {
+          "n": 200,
+          "p50": 0.05500000715255737,
+          "p95": 0.07999998480081558,
+          "media": 0.06917500019073486,
+          "min": 0.030000001192092896,
+          "max": 1.094999998807907
+        },
+        "decision_y_resto": {
+          "n": 200,
+          "p50": 0.010000020265579224,
+          "p95": 0.05550000667572005,
+          "media": 0.026775000095367433,
+          "min": 0,
+          "max": 1.030000001192093
+        }
+      },
+      "total_ms": {
+        "n": 200,
+        "p50": 48.8999999910593,
+        "p95": 53.82349999696016,
+        "media": 49.181300000399354,
+        "min": 42.62999999523163,
+        "max": 62.51500001549721
+      },
+      "control_por_escena": {
+        "marta_giro_izq": {
+          "cuadros": 25,
+          "s_max_media": 0.9059137194731859,
+          "candidata_marta": 1,
+          "calidad_ok": 1
+        },
+        "marta_giro_der": {
+          "cuadros": 25,
+          "s_max_media": 0.8889978971709472,
+          "candidata_marta": 1,
+          "calidad_ok": 1
+        },
+        "marta_luz_baja": {
+          "cuadros": 25,
+          "s_max_media": 0.8747581757918808,
+          "candidata_marta": 1,
+          "calidad_ok": 1
+        },
+        "marta_barbijo": {
+          "cuadros": 25,
+          "s_max_media": 0.3891106872869863,
+          "candidata_marta": 1,
+          "calidad_ok": 1
+        },
+        "tomas_frontal": {
+          "cuadros": 25,
+          "s_max_media": 0.08084666464371795,
+          "candidata_marta": 1,
+          "calidad_ok": 1
+        },
+        "desconocido_frontal": {
+          "cuadros": 25,
+          "s_max_media": 0.086651720957384,
+          "candidata_marta": 0.92,
+          "calidad_ok": 1
+        },
+        "marta_frontal": {
+          "cuadros": 25,
+          "s_max_media": 0.9386240124133179,
+          "candidata_marta": 1,
+          "calidad_ok": 1
+        },
+        "marta_sonrisa": {
+          "cuadros": 25,
+          "s_max_media": 0.8978652669122499,
+          "candidata_marta": 1,
+          "calidad_ok": 1
+        }
+      },
+      "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/155.0.0.0 Safari/537.36"
+    },
+    {
+      "variante": "sin aislamiento · 1280×720",
+      "cuadro": "1280×720",
+      "crossOriginIsolated": false,
+      "hilos_wasm": 1,
+      "hardwareConcurrency": 10,
+      "carga_modelos_ms": 218.39999997615814,
+      "galeria": 50,
+      "cuadros_medidos": 200,
+      "cuadros_descartados_warmup": 10,
+      "etapas_ms": {
+        "preproceso": {
+          "n": 200,
+          "p50": 14.900000005960464,
+          "p95": 16,
+          "media": 14.777500000149011,
+          "min": 13.400000005960464,
+          "max": 17
+        },
+        "deteccion": {
+          "n": 200,
+          "p50": 41.69999998807907,
+          "p95": 44.70999998897314,
+          "media": 41.919999999403956,
+          "min": 40,
+          "max": 50.900000005960464
+        },
+        "alineacion": {
+          "n": 200,
+          "p50": 0.4000000059604645,
+          "p95": 0.7999999836087227,
+          "media": 0.4755000004172325,
+          "min": 0.29999998211860657,
+          "max": 1.199999988079071
+        },
+        "embedding": {
+          "n": 200,
+          "p50": 21,
+          "p95": 22.804999981820583,
+          "media": 21.137999999672175,
+          "min": 19.900000005960464,
+          "max": 24.200000017881393
+        },
+        "busqueda": {
+          "n": 200,
+          "p50": 0,
+          "p95": 0.10000002384185791,
+          "media": 0.054000000208616256,
+          "min": 0,
+          "max": 0.699999988079071
+        },
+        "decision_y_resto": {
+          "n": 200,
+          "p50": 0,
+          "p95": 0.10000002384185791,
+          "media": 0.029500000327825546,
+          "min": 0,
+          "max": 0.9000000059604645
+        }
+      },
+      "total_ms": {
+        "n": 200,
+        "p50": 77.95000000298023,
+        "p95": 82.60500002354384,
+        "media": 78.39450000017881,
+        "min": 74.39999997615814,
+        "max": 89.30000001192093
+      },
+      "control_por_escena": {
+        "marta_giro_izq": {
+          "cuadros": 25,
+          "s_max_media": 0.9059137194731859,
+          "candidata_marta": 1,
+          "calidad_ok": 1
+        },
+        "marta_giro_der": {
+          "cuadros": 25,
+          "s_max_media": 0.8889978971709472,
+          "candidata_marta": 1,
+          "calidad_ok": 1
+        },
+        "marta_luz_baja": {
+          "cuadros": 25,
+          "s_max_media": 0.8747581757918808,
+          "candidata_marta": 1,
+          "calidad_ok": 1
+        },
+        "marta_barbijo": {
+          "cuadros": 25,
+          "s_max_media": 0.3891106872869863,
+          "candidata_marta": 1,
+          "calidad_ok": 1
+        },
+        "tomas_frontal": {
+          "cuadros": 25,
+          "s_max_media": 0.08084666464371795,
+          "candidata_marta": 1,
+          "calidad_ok": 1
+        },
+        "desconocido_frontal": {
+          "cuadros": 25,
+          "s_max_media": 0.086651720957384,
+          "candidata_marta": 0.92,
+          "calidad_ok": 1
+        },
+        "marta_frontal": {
+          "cuadros": 25,
+          "s_max_media": 0.9386240124133179,
+          "candidata_marta": 1,
+          "calidad_ok": 1
+        },
+        "marta_sonrisa": {
+          "cuadros": 25,
+          "s_max_media": 0.8978652669122499,
+          "candidata_marta": 1,
+          "calidad_ok": 1
+        }
+      },
+      "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/155.0.0.0 Safari/537.36"
+    },
+    {
+      "variante": "aislado (COOP/COEP) · 640×480",
+      "cuadro": "640×480",
+      "crossOriginIsolated": true,
+      "hilos_wasm": 4,
+      "hardwareConcurrency": 10,
+      "carga_modelos_ms": 52.98999997973442,
+      "galeria": 50,
+      "cuadros_medidos": 200,
+      "cuadros_descartados_warmup": 10,
+      "etapas_ms": {
+        "preproceso": {
+          "n": 200,
+          "p50": 6.860000014305115,
+          "p95": 7.655000001192093,
+          "media": 6.965724999755621,
+          "min": 5.635000020265579,
+          "max": 8.949999988079071
+        },
+        "deteccion": {
+          "n": 200,
+          "p50": 23.907499998807907,
+          "p95": 26.183250007033347,
+          "media": 23.901250000298024,
+          "min": 19.99499997496605,
+          "max": 27.759999990463257
+        },
+        "alineacion": {
+          "n": 200,
+          "p50": 0.4750000238418579,
+          "p95": 0.5605000019073485,
+          "media": 0.495450000166893,
+          "min": 0.26500001549720764,
+          "max": 2.2999999821186066
+        },
+        "embedding": {
+          "n": 200,
+          "p50": 11.17000000178814,
+          "p95": 12.190499997138977,
+          "media": 11.109400000870227,
+          "min": 8.550000011920929,
+          "max": 15.234999984502792
+        },
+        "busqueda": {
+          "n": 200,
+          "p50": 0.07499998807907104,
+          "p95": 0.08525000810623161,
+          "media": 0.07265000075101852,
+          "min": 0.034999996423721313,
+          "max": 0.11000001430511475
+        },
+        "decision_y_resto": {
+          "n": 200,
+          "p50": 0.014999985694885254,
+          "p95": 0.060250002145767124,
+          "media": 0.026549998223781585,
+          "min": 0,
+          "max": 1.1850000023841858
+        }
+      },
+      "total_ms": {
+        "n": 200,
+        "p50": 42.96500000357628,
+        "p95": 45.42024998813868,
+        "media": 42.57102500006557,
+        "min": 35.060000002384186,
+        "max": 47.28499999642372
+      },
+      "control_por_escena": {
+        "marta_giro_izq": {
+          "cuadros": 25,
+          "s_max_media": 0.9065021793549641,
+          "candidata_marta": 1,
+          "calidad_ok": 1
+        },
+        "marta_giro_der": {
+          "cuadros": 25,
+          "s_max_media": 0.8863633162460007,
+          "candidata_marta": 1,
+          "calidad_ok": 1
+        },
+        "marta_luz_baja": {
+          "cuadros": 25,
+          "s_max_media": 0.8771783978795256,
+          "candidata_marta": 1,
+          "calidad_ok": 1
+        },
+        "marta_barbijo": {
+          "cuadros": 25,
+          "s_max_media": 0.39548004512619045,
+          "candidata_marta": 1,
+          "calidad_ok": 1
+        },
+        "tomas_frontal": {
+          "cuadros": 25,
+          "s_max_media": 0.06741191126157582,
+          "candidata_marta": 0.8,
+          "calidad_ok": 1
+        },
+        "desconocido_frontal": {
+          "cuadros": 25,
+          "s_max_media": 0.09360132222887878,
+          "candidata_marta": 1,
+          "calidad_ok": 1
+        },
+        "marta_frontal": {
+          "cuadros": 25,
+          "s_max_media": 0.9371176872769531,
+          "candidata_marta": 1,
+          "calidad_ok": 1
+        },
+        "marta_sonrisa": {
+          "cuadros": 25,
+          "s_max_media": 0.8979024996806801,
+          "candidata_marta": 1,
+          "calidad_ok": 1
+        }
+      },
+      "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/155.0.0.0 Safari/537.36"
+    }
+  ],
+  "voz": {
+    "modelo": "Whisper base cuantizado q8 · transformers.js · onnxruntime-web WASM (worker de la app)",
+    "crossOriginIsolated": true,
+    "carga_modelo_ms": 1242.830000013113,
+    "repeticiones": 10,
+    "segmento_vad": {
+      "duracion_s": 1.9088125,
+      "texto": "¿Qué es esto?",
+      "primera_llamada_ms": 1405.094999998808,
+      "ms_worker": {
+        "n": 10,
+        "p50": 1125,
+        "p95": 1189.75,
+        "media": 1137.3,
+        "min": 1114,
+        "max": 1219
+      },
+      "ms_pared": {
+        "n": 10,
+        "p50": 1125.3225000053644,
+        "p95": 1190.0744999960064,
+        "media": 1137.5654999971389,
+        "min": 1114.4299999773502,
+        "max": 1219.544999986887
+      }
+    },
+    "clip_completo": {
+      "duracion_s": 5.8888125,
+      "texto": "¿Qué es esto?",
+      "primera_llamada_ms": 1160.405000001192,
+      "ms_worker": {
+        "n": 10,
+        "p50": 1298.5,
+        "p95": 1609,
+        "media": 1371.3,
+        "min": 1173,
+        "max": 1618
+      },
+      "ms_pared": {
+        "n": 10,
+        "p50": 1298.342500001192,
+        "p95": 1609.92499999851,
+        "media": 1371.7445000022649,
+        "min": 1173.449999988079,
+        "max": 1619.780000001192
+      }
+    }
+  }
+}

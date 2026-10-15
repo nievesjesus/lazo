@@ -88,9 +88,20 @@ data-lfw: venv
 	@test -d data/lfw || $(PY) scripts/prepare_lfw.py
 
 eval: data-lfw ## Evaluación FPIR/FNIR sobre LFW + gráficos en docs/eval/
-	$(VENV)/bin/mnemo-eval data/lfw --target-fpir $(TARGET_FPIR) --out docs/eval/eval_report_lfw.json
+	$(VENV)/bin/mnemo-eval data/lfw --target-fpir $(TARGET_FPIR) --dump-scores --out docs/eval/eval_report_lfw.json
 	$(PY) scripts/plot_threshold.py docs/eval/eval_report_lfw.json docs/eval/umbral_lfw.png
 	$(PY) scripts/plot_det.py docs/eval/eval_report_lfw.json docs/eval/det_lfw.png
+	$(PY) scripts/plot_scores.py docs/eval/eval_report_lfw.json docs/eval/distribuciones_lfw.png
+
+# --------------------------------------------------------------------------- informe
+.PHONY: informe informe-deps
+informe-deps: docs/informe/node_modules/.package-lock.json
+docs/informe/node_modules/.package-lock.json: docs/informe/package-lock.json
+	cd docs/informe && npm ci --no-audit --no-fund
+
+informe: informe-deps ## Genera el PDF del informe final
+	@cd docs/informe && if [ -f informe.md ]; then node build.mjs informe.md; \
+	  else echo "(no hay informe.md todavía: uso informe.sample.md)"; node build.mjs informe.sample.md informe.sample.pdf; fi
 
 # --------------------------------------------------------------------------- android
 .PHONY: android

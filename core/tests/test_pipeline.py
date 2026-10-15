@@ -11,6 +11,7 @@ from mnemo.decision import DecisionEngine, Observation, State, Zone
 from mnemo.detector import FaceDetector
 from mnemo.embedder import FaceEmbedder, l2_normalize, template_from_shots
 from mnemo.eval import metrics
+from mnemo.eval.run import box_crop
 from mnemo.gallery import Consent, FileKeyProvider, Gallery
 from mnemo.pipeline import Pipeline
 from mnemo.preprocess import sharpness
@@ -30,6 +31,16 @@ def test_similarity_recovers_known_transform():
     m = similarity_transform(src, dst)
     np.testing.assert_allclose(m[:, :2], s * r, atol=1e-4)
     np.testing.assert_allclose(m[:, 2], t, atol=1e-3)
+
+
+def test_box_crop_maps_the_box_to_the_whole_crop():
+    """Línea base de la ablación sin alineación: una caja uniforme de 100×60 queda como cuadrado de 112×112."""
+    img = np.zeros((300, 400, 3), np.uint8)
+    img[110:170, 150:250] = 255
+    crop = box_crop(img, np.array([150, 110, 250, 170], dtype=np.float32))
+    assert crop.shape == (112, 112, 3)
+    assert crop[30:80, 2:-2].min() == 255                               # el lado mayor (ancho) llena el recorte
+    assert crop[:15].max() == 0 and crop[-15:].max() == 0               # arriba y abajo queda el margen de la caja baja
 
 
 def test_sharpness_drops_with_blur():

@@ -18,7 +18,7 @@ from pathlib import Path
 import cv2
 import numpy as np
 
-from ..align import align
+from ..align import CROP_SIZE, align
 from ..config import Config
 from ..detector import FaceDetector
 from ..embedder import FaceEmbedder, template_from_shots
@@ -28,10 +28,26 @@ from . import metrics
 IMG_EXT = {".jpg", ".jpeg", ".png", ".bmp", ".webp"}
 
 
-def embed_dataset(root: Path, cfg: Config) -> dict[str, list[np.ndarray]]:
+def box_crop(img: np.ndarray, bbox: np.ndarray) -> np.ndarray:
+    """Línea base de la ablación (``--no-align``): recorte cuadrado de la caja detectada, a 112×112.
+
+    Es una similitud sin rotación (escala + traslación) con el mismo ``warpAffine`` que ``align``,
+    para que lo único que cambie sea que los cinco puntos dejan de usarse.
+    """
+    cx, cy = (bbox[0] + bbox[2]) / 2, (bbox[1] + bbox[3]) / 2
+    side = max(bbox[2] - bbox[0], bbox[3] - bbox[1])
+    s = CROP_SIZE / side
+    m = np.array([[s, 0, -(cx - side / 2) * s], [0, s, -(cy - side / 2) * s]], dtype=np.float32)
+    return cv2.warpAffine(img, m, (CROP_SIZE, CROP_SIZE), borderValue=0.0)
+
+
+def embed_dataset(
+    root: Path, cfg: Config, use_align: bool = True, use_enhance: bool = True, stats: dict | None = None
+) -> dict[str, list[np.ndarray]]:
     det = FaceDetector(cfg.det_model, cfg.det_size)
     emb = FaceEmbedder(cfg.rec_model)
     out: dict[str, list[np.ndarray]] = {}
+    n_img = n_sin_rostro = n_descartadas = 0
     for person in sorted(p for p in root.iterdir() if p.is_dir()):
         vecs = []
         for f in sorted(person.iterdir()):
@@ -40,12 +56,21 @@ def embed_dataset(root: Path, cfg: Config) -> dict[str, list[np.ndarray]]:
             img = cv2.imread(str(f))
             if img is None:
                 continue
-            img = enhance(img)
+            n_img += 1
+            if use_enhance:
+                img = enhance(img)
             faces = det.detect(img, max_faces=1)
             if faces:
-                vecs.append(emb.embed(align(img, faces[0].kps))[0])
+                crop = align(img, faces[0].kps) if use_align else box_crop(img, faces[0].bbox)
+                vecs.append(emb.embed(crop)[0])
+            else:
+                n_sin_rostro += 1
         if len(vecs) >= 2:
             out[person.name] = vecs
+        else:
+            n_descartadas += 1
+    if stats is not None:
+        stats.update(imagenes=n_img, sin_rostro=n_sin_rostro, personas_descartadas=n_descartadas)
     return out
 
 
@@ -75,16 +100,24 @@ def main(argv: list[str] | None = None) -> None:
     ap.add_argument("--enroll-shots", type=int, default=5)
     ap.add_argument("--seed", type=int, default=0)
     ap.add_argument("--out", type=Path, default=Path("eval_report.json"))
+    ap.add_argument("--no-align", action="store_true",
+                    help="ablación: recorte cuadrado de la caja detectada en vez de la similitud de 5 puntos")
+    ap.add_argument("--no-enhance", action="store_true", help="ablación: sin gamma/CLAHE/bilateral antes de detectar")
+    ap.add_argument("--dump-scores", action="store_true",
+                    help="guarda en el reporte los s_máx de prueba (impostoras, genuinas acertadas y errores de identidad)")
     args = ap.parse_args(argv)
 
     cfg = Config()
     rng = random.Random(args.seed)
-    embs = embed_dataset(args.data, cfg)
+    stats: dict = {}
+    embs = embed_dataset(args.data, cfg, use_align=not args.no_align, use_enhance=not args.no_enhance, stats=stats)
     ids = sorted(embs)
     rng.shuffle(ids)
     half = len(ids) // 2
     val_ids, test_ids = ids[:half], ids[half:]
     print(f"{len(ids)} identidades útiles → validación {len(val_ids)}, prueba {len(test_ids)}")
+    print(f"{stats['sin_rostro']} de {stats['imagenes']} imágenes sin rostro detectado; "
+          f"{stats['personas_descartadas']} personas con menos de 2 usables")
 
     results = {}
     for n in (10, 25, 50):
@@ -100,9 +133,17 @@ def main(argv: list[str] | None = None) -> None:
         rep.update({"N_val": n_val, "N_test": n_test, "tau_high": tau_high, "tau_low": tau_low})
         taus, fp, fn = metrics.det_curve(test)
         rep["det"] = {"tau": taus.tolist(), "fpir": fp.tolist(), "fnir": fn.tolist()}
+        if args.dump_scores:
+            gen_ok = test.genuine & (test.top_id == test.true_id)
+            gen_err = test.genuine & ~gen_ok
+            rep["scores"] = {
+                "impostoras": np.round(test.s_max[~test.genuine], 5).tolist(),
+                "genuinas_rango1": np.round(test.s_max[gen_ok], 5).tolist(),
+                "errores_identidad": np.round(test.s_max[gen_err], 5).tolist(),
+            }
         results[f"N={n}"] = rep
         print(f"N={n:>2}  τ=({tau_low:.3f}, {tau_high:.3f})  " + "  ".join(
-            f"{k}={v:.4f}" if isinstance(v, float) else f"{k}={v}" for k, v in rep.items() if k != "det"))
+            f"{k}={v:.4f}" if isinstance(v, float) else f"{k}={v}" for k, v in rep.items() if k not in ("det", "scores")))
 
     args.out.write_text(json.dumps(results, indent=2))
     print(f"Reporte en {args.out}")

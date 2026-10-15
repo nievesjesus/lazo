@@ -1,0 +1,683 @@
+{
+  "protocolo": {
+    "semilla": 0,
+    "target_fpir": 0.01,
+    "datos": "data/lfw"
+  },
+  "configuraciones": {
+    "completa": {
+      "poblacion": {
+        "identidades_utiles": 311,
+        "validacion": 155,
+        "prueba": 156,
+        "imagenes": 2681,
+        "sin_rostro": 1,
+        "personas_descartadas": 0
+      },
+      "por_N": {
+        "N=10": {
+          "tau_alta": 0.26932284235954285,
+          "tau_baja": 0.18932284235954283,
+          "FPIR": 0.008870967741935484,
+          "FPIR_ic95": [
+            0.0049605038242688405,
+            0.015815131915844695
+          ],
+          "FNIR": 0.02631578947368418,
+          "FNIR_ic95": [
+            0.004660467553530057,
+            0.13495178436800254
+          ],
+          "rank1": 0.9736842105263158,
+          "rank1_ic95": [
+            0.8650482156319974,
+            0.9953395324464698
+          ],
+          "abstencion": 0.13145539906103287,
+          "abstencion_impostoras": 0.13548387096774195,
+          "abstencion_genuinas": 0.0,
+          "errores_identidad": 1,
+          "errores_identidad_sobre_tau_alta": 0,
+          "n_genuinas": 38,
+          "n_impostoras": 1240,
+          "tau_prueba_para_FPIR_1pct": 0.2670199871063233,
+          "FNIR_a_FPIR_1pct_tau_prueba": 0.02631578947368418
+        },
+        "N=25": {
+          "tau_alta": 0.35378965735435486,
+          "tau_baja": 0.27378965735435484,
+          "FPIR": 0.0008976660682226212,
+          "FPIR_ic95": [
+            0.00015847360517276445,
+            0.005067311515008842
+          ],
+          "FNIR": 0.0337078651685393,
+          "FNIR_ic95": [
+            0.01152901222365258,
+            0.09447519278789399
+          ],
+          "rank1": 0.9662921348314607,
+          "rank1_ic95": [
+            0.9055248072121062,
+            0.9884709877763475
+          ],
+          "abstencion": 0.01828761429758936,
+          "abstencion_impostoras": 0.019748653500897665,
+          "abstencion_genuinas": 0.0,
+          "errores_identidad": 3,
+          "errores_identidad_sobre_tau_alta": 0,
+          "n_genuinas": 89,
+          "n_impostoras": 1114,
+          "tau_prueba_para_FPIR_1pct": 0.28553000092506414,
+          "FNIR_a_FPIR_1pct_tau_prueba": 0.0337078651685393
+        },
+        "N=50": {
+          "tau_alta": 0.3838983178138733,
+          "tau_baja": 0.3038983178138733,
+          "FPIR": 0.0011061946902654867,
+          "FPIR_ic95": [
+            0.0001952921972500181,
+            0.006239310491148486
+          ],
+          "FNIR": 0.028735632183908066,
+          "FNIR_ic95": [
+            0.012335107894271426,
+            0.06549595075567324
+          ],
+          "rank1": 0.9770114942528736,
+          "rank1_ic95": [
+            0.9423900098403101,
+            0.9910248942091363
+          ],
+          "abstencion": 0.0074211502782931356,
+          "abstencion_impostoras": 0.008849557522123894,
+          "abstencion_genuinas": 0.0,
+          "errores_identidad": 4,
+          "errores_identidad_sobre_tau_alta": 0,
+          "n_genuinas": 174,
+          "n_impostoras": 904,
+          "tau_prueba_para_FPIR_1pct": 0.30138000845909124,
+          "FNIR_a_FPIR_1pct_tau_prueba": 0.028735632183908066
+        }
+      }
+    },
+    "sin alineación": {
+      "poblacion": {
+        "identidades_utiles": 311,
+        "validacion": 155,
+        "prueba": 156,
+        "imagenes": 2681,
+        "sin_rostro": 1,
+        "personas_descartadas": 0
+      },
+      "por_N": {
+        "N=10": {
+          "tau_alta": 0.34718772768974304,
+          "tau_baja": 0.267187727689743,
+          "FPIR": 0.00564516129032258,
+          "FPIR_ic95": [
+            0.002737135730594172,
+            0.01160681288794375
+          ],
+          "FNIR": 0.052631578947368474,
+          "FNIR_ic95": [
+            0.014553902448536798,
+            0.17285766881068843
+          ],
+          "rank1": 0.9736842105263158,
+          "rank1_ic95": [
+            0.8650482156319974,
+            0.9953395324464698
+          ],
+          "abstencion": 0.07433489827856025,
+          "abstencion_impostoras": 0.07580645161290323,
+          "abstencion_genuinas": 0.02631578947368421,
+          "errores_identidad": 1,
+          "errores_identidad_sobre_tau_alta": 0,
+          "n_genuinas": 38,
+          "n_impostoras": 1240,
+          "tau_prueba_para_FPIR_1pct": 0.33491998910903936,
+          "FNIR_a_FPIR_1pct_tau_prueba": 0.02631578947368418
+        },
+        "N=25": {
+          "tau_alta": 0.3962235748767853,
+          "tau_baja": 0.31622357487678526,
+          "FPIR": 0.0026929982046678637,
+          "FPIR_ic95": [
+            0.0009162592846793079,
+            0.007887850349458481
+          ],
+          "FNIR": 0.1348314606741573,
+          "FNIR_ic95": [
+            0.07884193534944134,
+            0.22104087580417942
+          ],
+          "rank1": 0.9887640449438202,
+          "rank1_ic95": [
+            0.9390660617800944,
+            0.9980138679065976
+          ],
+          "abstencion": 0.043225270157938485,
+          "abstencion_impostoras": 0.03949730700179533,
+          "abstencion_genuinas": 0.0898876404494382,
+          "errores_identidad": 1,
+          "errores_identidad_sobre_tau_alta": 0,
+          "n_genuinas": 89,
+          "n_impostoras": 1114,
+          "tau_prueba_para_FPIR_1pct": 0.35062998533248907,
+          "FNIR_a_FPIR_1pct_tau_prueba": 0.0786516853932584
+        },
+        "N=50": {
+          "tau_alta": 0.41605910658836365,
+          "tau_baja": 0.33605910658836363,
+          "FPIR": 0.0055309734513274336,
+          "FPIR_ic95": [
+            0.002364711512753653,
+            0.012882001129628014
+          ],
+          "FNIR": 0.14942528735632188,
+          "FNIR_ic95": [
+            0.10405657055929221,
+            0.2099397047778618
+          ],
+          "rank1": 0.9597701149425287,
+          "rank1_ic95": [
+            0.9192985009608964,
+            0.9803785149903771
+          ],
+          "abstencion": 0.05380333951762523,
+          "abstencion_impostoras": 0.048672566371681415,
+          "abstencion_genuinas": 0.08045977011494253,
+          "errores_identidad": 7,
+          "errores_identidad_sobre_tau_alta": 0,
+          "n_genuinas": 174,
+          "n_impostoras": 904,
+          "tau_prueba_para_FPIR_1pct": 0.39085999131202703,
+          "FNIR_a_FPIR_1pct_tau_prueba": 0.13218390804597702
+        }
+      }
+    },
+    "sin preprocesamiento": {
+      "poblacion": {
+        "identidades_utiles": 311,
+        "validacion": 155,
+        "prueba": 156,
+        "imagenes": 2681,
+        "sin_rostro": 1,
+        "personas_descartadas": 0
+      },
+      "por_N": {
+        "N=10": {
+          "tau_alta": 0.2388923615217209,
+          "tau_baja": 0.15889236152172087,
+          "FPIR": 0.008870967741935484,
+          "FPIR_ic95": [
+            0.0049605038242688405,
+            0.015815131915844695
+          ],
+          "FNIR": 0.02631578947368418,
+          "FNIR_ic95": [
+            0.004660467553530057,
+            0.13495178436800254
+          ],
+          "rank1": 0.9736842105263158,
+          "rank1_ic95": [
+            0.8650482156319974,
+            0.9953395324464698
+          ],
+          "abstencion": 0.17370892018779344,
+          "abstencion_impostoras": 0.17903225806451614,
+          "abstencion_genuinas": 0.0,
+          "errores_identidad": 1,
+          "errores_identidad_sobre_tau_alta": 0,
+          "n_genuinas": 38,
+          "n_impostoras": 1240,
+          "tau_prueba_para_FPIR_1pct": 0.23805999755859378,
+          "FNIR_a_FPIR_1pct_tau_prueba": 0.02631578947368418
+        },
+        "N=25": {
+          "tau_alta": 0.32763275504112244,
+          "tau_baja": 0.24763275504112242,
+          "FPIR": 0.0,
+          "FPIR_ic95": [
+            0.0,
+            0.003436622863203516
+          ],
+          "FNIR": 0.0449438202247191,
+          "FNIR_ic95": [
+            0.01761420103381913,
+            0.10993207132684676
+          ],
+          "rank1": 0.9550561797752809,
+          "rank1_ic95": [
+            0.8900679286731532,
+            0.9823857989661808
+          ],
+          "abstencion": 0.015793848711554447,
+          "abstencion_impostoras": 0.017055655296229804,
+          "abstencion_genuinas": 0.0,
+          "errores_identidad": 4,
+          "errores_identidad_sobre_tau_alta": 0,
+          "n_genuinas": 89,
+          "n_impostoras": 1114,
+          "tau_prueba_para_FPIR_1pct": 0.25841999053955084,
+          "FNIR_a_FPIR_1pct_tau_prueba": 0.0449438202247191
+        },
+        "N=50": {
+          "tau_alta": 0.34815168380737305,
+          "tau_baja": 0.26815168380737303,
+          "FPIR": 0.0,
+          "FPIR_ic95": [
+            0.0,
+            0.004231575199902714
+          ],
+          "FNIR": 0.03448275862068961,
+          "FNIR_ic95": [
+            0.015897570022231685,
+            0.0731794513271039
+          ],
+          "rank1": 0.9712643678160919,
+          "rank1_ic95": [
+            0.9345040492443267,
+            0.9876648921057286
+          ],
+          "abstencion": 0.012059369202226345,
+          "abstencion_impostoras": 0.014380530973451327,
+          "abstencion_genuinas": 0.0,
+          "errores_identidad": 5,
+          "errores_identidad_sobre_tau_alta": 0,
+          "n_genuinas": 174,
+          "n_impostoras": 904,
+          "tau_prueba_para_FPIR_1pct": 0.2748099863529206,
+          "FNIR_a_FPIR_1pct_tau_prueba": 0.03448275862068961
+        }
+      }
+    },
+    "sin ambas": {
+      "poblacion": {
+        "identidades_utiles": 311,
+        "validacion": 155,
+        "prueba": 156,
+        "imagenes": 2681,
+        "sin_rostro": 1,
+        "personas_descartadas": 0
+      },
+      "por_N": {
+        "N=10": {
+          "tau_alta": 0.32385730743408203,
+          "tau_baja": 0.24385730743408202,
+          "FPIR": 0.012096774193548387,
+          "FPIR_ic95": [
+            0.007344300114568113,
+            0.01986302274712103
+          ],
+          "FNIR": 0.02631578947368418,
+          "FNIR_ic95": [
+            0.004660467553530057,
+            0.13495178436800254
+          ],
+          "rank1": 1.0,
+          "rank1_ic95": [
+            0.90818706741616,
+            0.9999999999999999
+          ],
+          "abstencion": 0.07198748043818466,
+          "abstencion_impostoras": 0.07419354838709677,
+          "abstencion_genuinas": 0.0,
+          "errores_identidad": 0,
+          "errores_identidad_sobre_tau_alta": 0,
+          "n_genuinas": 38,
+          "n_impostoras": 1240,
+          "tau_prueba_para_FPIR_1pct": 0.3342199921607972,
+          "FNIR_a_FPIR_1pct_tau_prueba": 0.052631578947368474
+        },
+        "N=25": {
+          "tau_alta": 0.3832125663757324,
+          "tau_baja": 0.3032125663757324,
+          "FPIR": 0.003590664272890485,
+          "FPIR_ic95": [
+            0.00139717568153347,
+            0.009196096209582408
+          ],
+          "FNIR": 0.101123595505618,
+          "FNIR_ic95": [
+            0.05411793406379983,
+            0.1811386750424629
+          ],
+          "rank1": 0.9775280898876404,
+          "rank1_ic95": [
+            0.9217221314006669,
+            0.9938157309369058
+          ],
+          "abstencion": 0.043225270157938485,
+          "abstencion_impostoras": 0.04398563734290844,
+          "abstencion_genuinas": 0.033707865168539325,
+          "errores_identidad": 2,
+          "errores_identidad_sobre_tau_alta": 0,
+          "n_genuinas": 89,
+          "n_impostoras": 1114,
+          "tau_prueba_para_FPIR_1pct": 0.34593999385833746,
+          "FNIR_a_FPIR_1pct_tau_prueba": 0.0786516853932584
+        },
+        "N=50": {
+          "tau_alta": 0.398798406124115,
+          "tau_baja": 0.318798406124115,
+          "FPIR": 0.007743362831858407,
+          "FPIR_ic95": [
+            0.003755809316828551,
+            0.015896958302544693
+          ],
+          "FNIR": 0.0977011494252874,
+          "FNIR_ic95": [
+            0.061896471074238534,
+            0.15088613996839717
+          ],
+          "rank1": 0.9597701149425287,
+          "rank1_ic95": [
+            0.9192985009608964,
+            0.9803785149903771
+          ],
+          "abstencion": 0.05102040816326531,
+          "abstencion_impostoras": 0.05309734513274336,
+          "abstencion_genuinas": 0.040229885057471264,
+          "errores_identidad": 7,
+          "errores_identidad_sobre_tau_alta": 0,
+          "n_genuinas": 174,
+          "n_impostoras": 904,
+          "tau_prueba_para_FPIR_1pct": 0.3866600096225739,
+          "FNIR_a_FPIR_1pct_tau_prueba": 0.09195402298850575
+        }
+      }
+    }
+  },
+  "sensibilidad_banda": {
+    "0.04": {
+      "poblacion": {
+        "identidades_utiles": 311,
+        "validacion": 155,
+        "prueba": 156,
+        "imagenes": 2681,
+        "sin_rostro": 1,
+        "personas_descartadas": 0
+      },
+      "por_N": {
+        "N=10": {
+          "tau_alta": 0.26932284235954285,
+          "tau_baja": 0.22932284235954284,
+          "FPIR": 0.008870967741935484,
+          "FPIR_ic95": [
+            0.0049605038242688405,
+            0.015815131915844695
+          ],
+          "FNIR": 0.02631578947368418,
+          "FNIR_ic95": [
+            0.004660467553530057,
+            0.13495178436800254
+          ],
+          "rank1": 0.9736842105263158,
+          "rank1_ic95": [
+            0.8650482156319974,
+            0.9953395324464698
+          ],
+          "abstencion": 0.03442879499217527,
+          "abstencion_impostoras": 0.035483870967741936,
+          "abstencion_genuinas": 0.0,
+          "errores_identidad": 1,
+          "errores_identidad_sobre_tau_alta": 0,
+          "n_genuinas": 38,
+          "n_impostoras": 1240,
+          "tau_prueba_para_FPIR_1pct": 0.2670199871063233,
+          "FNIR_a_FPIR_1pct_tau_prueba": 0.02631578947368418
+        },
+        "N=25": {
+          "tau_alta": 0.35378965735435486,
+          "tau_baja": 0.3137896573543549,
+          "FPIR": 0.0008976660682226212,
+          "FPIR_ic95": [
+            0.00015847360517276445,
+            0.005067311515008842
+          ],
+          "FNIR": 0.0337078651685393,
+          "FNIR_ic95": [
+            0.01152901222365258,
+            0.09447519278789399
+          ],
+          "rank1": 0.9662921348314607,
+          "rank1_ic95": [
+            0.9055248072121062,
+            0.9884709877763475
+          ],
+          "abstencion": 0.0016625103906899418,
+          "abstencion_impostoras": 0.0017953321364452424,
+          "abstencion_genuinas": 0.0,
+          "errores_identidad": 3,
+          "errores_identidad_sobre_tau_alta": 0,
+          "n_genuinas": 89,
+          "n_impostoras": 1114,
+          "tau_prueba_para_FPIR_1pct": 0.28553000092506414,
+          "FNIR_a_FPIR_1pct_tau_prueba": 0.0337078651685393
+        },
+        "N=50": {
+          "tau_alta": 0.3838983178138733,
+          "tau_baja": 0.3438983178138733,
+          "FPIR": 0.0011061946902654867,
+          "FPIR_ic95": [
+            0.0001952921972500181,
+            0.006239310491148486
+          ],
+          "FNIR": 0.028735632183908066,
+          "FNIR_ic95": [
+            0.012335107894271426,
+            0.06549595075567324
+          ],
+          "rank1": 0.9770114942528736,
+          "rank1_ic95": [
+            0.9423900098403101,
+            0.9910248942091363
+          ],
+          "abstencion": 0.0,
+          "abstencion_impostoras": 0.0,
+          "abstencion_genuinas": 0.0,
+          "errores_identidad": 4,
+          "errores_identidad_sobre_tau_alta": 0,
+          "n_genuinas": 174,
+          "n_impostoras": 904,
+          "tau_prueba_para_FPIR_1pct": 0.30138000845909124,
+          "FNIR_a_FPIR_1pct_tau_prueba": 0.028735632183908066
+        }
+      }
+    },
+    "0.08": {
+      "poblacion": {
+        "identidades_utiles": 311,
+        "validacion": 155,
+        "prueba": 156,
+        "imagenes": 2681,
+        "sin_rostro": 1,
+        "personas_descartadas": 0
+      },
+      "por_N": {
+        "N=10": {
+          "tau_alta": 0.26932284235954285,
+          "tau_baja": 0.18932284235954283,
+          "FPIR": 0.008870967741935484,
+          "FPIR_ic95": [
+            0.0049605038242688405,
+            0.015815131915844695
+          ],
+          "FNIR": 0.02631578947368418,
+          "FNIR_ic95": [
+            0.004660467553530057,
+            0.13495178436800254
+          ],
+          "rank1": 0.9736842105263158,
+          "rank1_ic95": [
+            0.8650482156319974,
+            0.9953395324464698
+          ],
+          "abstencion": 0.13145539906103287,
+          "abstencion_impostoras": 0.13548387096774195,
+          "abstencion_genuinas": 0.0,
+          "errores_identidad": 1,
+          "errores_identidad_sobre_tau_alta": 0,
+          "n_genuinas": 38,
+          "n_impostoras": 1240,
+          "tau_prueba_para_FPIR_1pct": 0.2670199871063233,
+          "FNIR_a_FPIR_1pct_tau_prueba": 0.02631578947368418
+        },
+        "N=25": {
+          "tau_alta": 0.35378965735435486,
+          "tau_baja": 0.27378965735435484,
+          "FPIR": 0.0008976660682226212,
+          "FPIR_ic95": [
+            0.00015847360517276445,
+            0.005067311515008842
+          ],
+          "FNIR": 0.0337078651685393,
+          "FNIR_ic95": [
+            0.01152901222365258,
+            0.09447519278789399
+          ],
+          "rank1": 0.9662921348314607,
+          "rank1_ic95": [
+            0.9055248072121062,
+            0.9884709877763475
+          ],
+          "abstencion": 0.01828761429758936,
+          "abstencion_impostoras": 0.019748653500897665,
+          "abstencion_genuinas": 0.0,
+          "errores_identidad": 3,
+          "errores_identidad_sobre_tau_alta": 0,
+          "n_genuinas": 89,
+          "n_impostoras": 1114,
+          "tau_prueba_para_FPIR_1pct": 0.28553000092506414,
+          "FNIR_a_FPIR_1pct_tau_prueba": 0.0337078651685393
+        },
+        "N=50": {
+          "tau_alta": 0.3838983178138733,
+          "tau_baja": 0.3038983178138733,
+          "FPIR": 0.0011061946902654867,
+          "FPIR_ic95": [
+            0.0001952921972500181,
+            0.006239310491148486
+          ],
+          "FNIR": 0.028735632183908066,
+          "FNIR_ic95": [
+            0.012335107894271426,
+            0.06549595075567324
+          ],
+          "rank1": 0.9770114942528736,
+          "rank1_ic95": [
+            0.9423900098403101,
+            0.9910248942091363
+          ],
+          "abstencion": 0.0074211502782931356,
+          "abstencion_impostoras": 0.008849557522123894,
+          "abstencion_genuinas": 0.0,
+          "errores_identidad": 4,
+          "errores_identidad_sobre_tau_alta": 0,
+          "n_genuinas": 174,
+          "n_impostoras": 904,
+          "tau_prueba_para_FPIR_1pct": 0.30138000845909124,
+          "FNIR_a_FPIR_1pct_tau_prueba": 0.028735632183908066
+        }
+      }
+    },
+    "0.12": {
+      "poblacion": {
+        "identidades_utiles": 311,
+        "validacion": 155,
+        "prueba": 156,
+        "imagenes": 2681,
+        "sin_rostro": 1,
+        "personas_descartadas": 0
+      },
+      "por_N": {
+        "N=10": {
+          "tau_alta": 0.26932284235954285,
+          "tau_baja": 0.14932284235954285,
+          "FPIR": 0.008870967741935484,
+          "FPIR_ic95": [
+            0.0049605038242688405,
+            0.015815131915844695
+          ],
+          "FNIR": 0.02631578947368418,
+          "FNIR_ic95": [
+            0.004660467553530057,
+            0.13495178436800254
+          ],
+          "rank1": 0.9736842105263158,
+          "rank1_ic95": [
+            0.8650482156319974,
+            0.9953395324464698
+          ],
+          "abstencion": 0.34663536776212833,
+          "abstencion_impostoras": 0.357258064516129,
+          "abstencion_genuinas": 0.0,
+          "errores_identidad": 1,
+          "errores_identidad_sobre_tau_alta": 0,
+          "n_genuinas": 38,
+          "n_impostoras": 1240,
+          "tau_prueba_para_FPIR_1pct": 0.2670199871063233,
+          "FNIR_a_FPIR_1pct_tau_prueba": 0.02631578947368418
+        },
+        "N=25": {
+          "tau_alta": 0.35378965735435486,
+          "tau_baja": 0.23378965735435486,
+          "FPIR": 0.0008976660682226212,
+          "FPIR_ic95": [
+            0.00015847360517276445,
+            0.005067311515008842
+          ],
+          "FNIR": 0.0337078651685393,
+          "FNIR_ic95": [
+            0.01152901222365258,
+            0.09447519278789399
+          ],
+          "rank1": 0.9662921348314607,
+          "rank1_ic95": [
+            0.9055248072121062,
+            0.9884709877763475
+          ],
+          "abstencion": 0.07647547797173733,
+          "abstencion_impostoras": 0.08348294434470377,
+          "abstencion_genuinas": 0.0,
+          "errores_identidad": 3,
+          "errores_identidad_sobre_tau_alta": 0,
+          "n_genuinas": 89,
+          "n_impostoras": 1114,
+          "tau_prueba_para_FPIR_1pct": 0.28553000092506414,
+          "FNIR_a_FPIR_1pct_tau_prueba": 0.0337078651685393
+        },
+        "N=50": {
+          "tau_alta": 0.3838983178138733,
+          "tau_baja": 0.2638983178138733,
+          "FPIR": 0.0011061946902654867,
+          "FPIR_ic95": [
+            0.0001952921972500181,
+            0.006239310491148486
+          ],
+          "FNIR": 0.028735632183908066,
+          "FNIR_ic95": [
+            0.012335107894271426,
+            0.06549595075567324
+          ],
+          "rank1": 0.9770114942528736,
+          "rank1_ic95": [
+            0.9423900098403101,
+            0.9910248942091363
+          ],
+          "abstencion": 0.04081632653061224,
+          "abstencion_impostoras": 0.048672566371681415,
+          "abstencion_genuinas": 0.0,
+          "errores_identidad": 4,
+          "errores_identidad_sobre_tau_alta": 0,
+          "n_genuinas": 174,
+          "n_impostoras": 904,
+          "tau_prueba_para_FPIR_1pct": 0.30138000845909124,
+          "FNIR_a_FPIR_1pct_tau_prueba": 0.028735632183908066
+        }
+      }
+    }
+  }
+}
