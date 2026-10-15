@@ -8,3 +8,10 @@ eval_report.json
 .DS_Store
 web/public/group-test.jpg
 data/
+
+# Entrega final: medios pesados que se regeneran (ver README, «Informe y video»)
+docs/video/out/*.mp4
+docs/video/out/contact.png
+docs/video/rec/*.mp4
+docs/video/shared/casting*/
+/mnemo-*.zip
