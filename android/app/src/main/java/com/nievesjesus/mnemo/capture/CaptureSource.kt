@@ -4,16 +4,16 @@ import android.graphics.Bitmap
 import kotlinx.coroutines.flow.Flow
 
 /**
- * Interfaz de captura abstracta (sección 7.3). El pipeline no sabe si los cuadros vienen de las
- * Ray-Ban Meta ([GlassesCameraSource]) o de la cámara del teléfono ([PhoneCameraSource]).
+ * Abstract capture interface. The pipeline does not know whether the frames come from the
+ * Ray-Ban Meta glasses ([GlassesCameraSource]) or from the phone camera ([PhoneCameraSource]).
  *
- * Contrato: cada [Frame] es propiedad del consumidor sólo durante su procesamiento; después se
- * recicla (RN-02: ninguna imagen persiste).
+ * Contract: each [Frame] belongs to the consumer only while it is being processed; afterwards it
+ * is recycled (no image ever persists).
  */
 interface CaptureSource {
   val name: String
 
-  /** Cuadros en orientación vertical, ARGB_8888. Se detiene al cancelar la colección. */
+  /** Frames in portrait orientation, ARGB_8888. Stops when the collection is cancelled. */
   fun frames(): Flow<Frame>
 
   suspend fun stop()

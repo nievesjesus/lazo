@@ -52,9 +52,8 @@ import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
 
 /**
- * Vista del portador (P-07/P-08) + controles del banco de pruebas. La app del cuidador completa
- * (P-01 a P-09) está implementada en el demo web; esta actividad se concentra en el ciclo en el
- * dispositivo y en las dos implementaciones de captura.
+ * Wearer view + test-bench controls. The full caregiver app is implemented in the web demo;
+ * this activity focuses on the on-device loop and on the two capture implementations.
  */
 class MainActivity : AppCompatActivity() {
 
@@ -77,14 +76,14 @@ class MainActivity : AppCompatActivity() {
   private var privacy = false
   private var wearablesReady = false
   private lateinit var voice: VoiceListener
-  /** «¿Quién es?» pedido desde la UI o la voz; lo consume el hilo del pipeline. */
+  /** «¿Quién es?» requested from the UI or by voice; consumed by the pipeline thread. */
   @Volatile private var askRequested = false
-  private var pendingAsk: Pair<Long, Boolean>? = null // (momento, ¿se vio una cara?)
+  private var pendingAsk: Pair<Long, Boolean>? = null // (timestamp, was a face seen?)
 
   private val androidPermissions =
       registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { granted ->
         if (granted[Manifest.permission.BLUETOOTH_CONNECT] == true) {
-          Wearables.initialize(this) // requerido antes de cualquier API de Wearables
+          Wearables.initialize(this) // required before any Wearables API
           wearablesReady = true
         }
       }
@@ -133,7 +132,7 @@ class MainActivity : AppCompatActivity() {
     status.text = "Galería: ${gallery.active().size} identidades · procesamiento local"
   }
 
-  // ------------------------------------------------------------------ ciclo de reconocimiento
+  // ------------------------------------------------------------------ recognition loop
   private fun start(which: Source) {
     lastSource = which
     lifecycleScope.launch {
@@ -165,7 +164,7 @@ class MainActivity : AppCompatActivity() {
             }
           }
           val shown = drawOverlay(frame.bitmap, res)
-          frame.release() // RN-02: el cuadro no sobrevive al ciclo
+          frame.release() // the frame does not outlive the cycle
           withContext(Dispatchers.Main) {
             preview.setImageBitmap(shown)
             status.text = "${src.name} · ${res.state.name.lowercase()} · ${res.totalMs} ms" +
@@ -198,12 +197,12 @@ class MainActivity : AppCompatActivity() {
     if (granted) return true
     val result = suspendCancellableCoroutine { cont ->
       glassesPermissionCont = cont
-      glassesPermission.launch(Permission.CAMERA) // redirige a la app Meta AI
+      glassesPermission.launch(Permission.CAMERA) // redirects to the Meta AI app
     }
     return (result == PermissionStatus.Granted).also { if (!it) toast("Permiso de cámara de las gafas denegado") }
   }
 
-  /** Gafas simuladas: stream de la cámara trasera del teléfono a través del SDK, sin hardware. */
+  /** Simulated glasses: streams the phone's rear camera through the SDK, with no hardware. */
   private suspend fun setupMockGlasses(): Boolean {
     val kit = MockDeviceKit.getInstance(applicationContext)
     kit.enable(MockDeviceKitConfig(initiallyRegistered = true))
@@ -227,10 +226,10 @@ class MainActivity : AppCompatActivity() {
     if (privacy) { preview.setImageBitmap(null); card.text = "Pausado · no hay captura ni inferencia" }
   }
 
-  // ------------------------------------------------------------------ alta simplificada (CU-01)
+  // ------------------------------------------------------------------ simplified enrollment
   /**
-   * Alta en este mismo teléfono con fines de prueba. En el diseño, el alta ocurre en el teléfono de la
-   * persona enrolada (QR + P-04 + P-03); ese flujo completo está en el demo web.
+   * Enrollment on this same phone, for testing. By design, enrollment happens on the enrolled
+   * person's own phone (QR + consent + guided capture); that full flow is in the web demo.
    */
   private fun enroll() {
     val box = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(48, 16, 48, 0) }
@@ -271,7 +270,7 @@ class MainActivity : AppCompatActivity() {
     }
   }
 
-  // ------------------------------------------------------------------ utilidades
+  // ------------------------------------------------------------------ utilities
   private fun drawOverlay(src: Bitmap, res: com.nievesjesus.mnemo.pipeline.FrameResult): Bitmap {
     val out = src.copy(Bitmap.Config.ARGB_8888, true)
     val face = res.face ?: return out

@@ -1,12 +1,12 @@
-"""Métricas de identificación 1:N en conjunto abierto (sección 7.6).
+"""Open-set 1:N identification metrics.
 
-- FPIR (false positive identification rate): fracción de búsquedas de impostores (personas
-  NO enroladas) en las que el sistema afirma una identidad.
-- FNIR (false negative identification rate): fracción de búsquedas genuinas en las que el
-  sistema no afirma la identidad correcta (se abstiene, descarta o nombra a otra persona).
-- Exactitud de rango 1 (galería cerrada), tasa de abstención y curva DET.
+- FPIR (false positive identification rate): fraction of impostor searches (people NOT
+  enrolled) in which the system asserts an identity.
+- FNIR (false negative identification rate): fraction of genuine searches in which the
+  system does not assert the correct identity (it abstains, discards or names someone else).
+- Rank-1 accuracy (closed gallery), abstention rate and DET curve.
 
-El umbral se deriva sobre validación fijando el FPIR objetivo y se congela antes de prueba.
+The threshold is derived on validation by fixing the target FPIR and is frozen before testing.
 """
 from __future__ import annotations
 
@@ -17,10 +17,10 @@ import numpy as np
 
 @dataclass
 class Searches:
-    """Resultado de buscar cada sonda contra la galería.
+    """Result of searching each probe against the gallery.
 
-    ``s_max``/``top_id``: similitud máxima e identidad ganadora por sonda.
-    ``true_id``: identidad real de la sonda, o None si es un impostor (no enrolado).
+    ``s_max``/``top_id``: maximum similarity and winning identity per probe.
+    ``true_id``: the probe's true identity, or None if it is an impostor (not enrolled).
     """
     s_max: np.ndarray
     top_id: np.ndarray
@@ -70,10 +70,10 @@ def det_curve(s: Searches, taus: np.ndarray | None = None) -> tuple[np.ndarray, 
 
 
 def threshold_at_fpir(s: Searches, target: float = 0.01) -> float:
-    """Menor τ tal que FPIR(τ) ≤ objetivo, derivado de la distribución de impostores."""
+    """Smallest τ such that FPIR(τ) ≤ target, derived from the impostor distribution."""
     imp = np.sort(s.s_max[~s.genuine])[::-1]
     if len(imp) == 0:
-        raise ValueError("Se necesitan impostores para calibrar el FPIR")
+        raise ValueError("Impostors are needed to calibrate the FPIR")
     k = int(np.floor(target * len(imp)))
     return float(np.nextafter(imp[k], np.inf)) if k < len(imp) else float(imp[-1])
 
@@ -90,7 +90,7 @@ def report(s: Searches, tau_low: float, tau_high: float) -> dict[str, float]:
 
 
 def subgroup_fnir(s: Searches, groups: np.ndarray, tau: float) -> dict[str, float]:
-    """Sección 7.7: FNIR por subgrupo a FPIR fijo. ``groups`` etiqueta cada sonda genuina."""
+    """FNIR per subgroup at a fixed FPIR. ``groups`` labels each genuine probe."""
     out = {}
     for g in np.unique(groups[s.genuine]):
         mask = s.genuine & (groups == g)

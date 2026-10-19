@@ -1,10 +1,10 @@
-"""Banco de pruebas de escritorio.
+"""Desktop test bench.
 
-    python -m mnemo.cli enroll --name Marta --relation "tu hija"   # alta guiada con la webcam
-    python -m mnemo.cli live                                        # reconocimiento en vivo
-    python -m mnemo.cli live --source http://192.168.0.10:8080/video   # cámara del teléfono (IP-cam)
-    python -m mnemo.cli live --source glasses                       # puente desde la app Android
-    python -m mnemo.cli live --listen                               # micrófono: «¿quién es?» (faster-whisper local)
+    python -m mnemo.cli enroll --name Marta --relation "tu hija"   # guided enrollment with the webcam
+    python -m mnemo.cli live                                        # live recognition
+    python -m mnemo.cli live --source http://192.168.0.10:8080/video   # phone camera (IP cam)
+    python -m mnemo.cli live --source glasses                       # bridge from the Android app
+    python -m mnemo.cli live --listen                               # microphone: «¿quién es?» (local faster-whisper)
     python -m mnemo.cli list | revoke <id>
 """
 from __future__ import annotations
@@ -42,9 +42,9 @@ _speaking: subprocess.Popen | None = None
 
 
 def speak(text: str) -> None:
-    """TTS local del sistema operativo (tabla 7): sin servicios en la nube."""
+    """Local text-to-speech from the operating system: no cloud services."""
     global _speaking
-    print(f"[aviso al oído] {text}")
+    print(f"[spoken] {text}")
     if platform.system() == "Darwin":
         _speaking = subprocess.Popen(["say", "-v", "Paulina", text], stderr=subprocess.DEVNULL)
 
@@ -60,9 +60,9 @@ def open_stores(cfg: Config) -> tuple[Gallery, History]:
 
 
 def draw(img: np.ndarray, res, cfg: Config) -> None:
-    status = "Procesando en el dispositivo · sin conexion"
+    status = "Processing on device · offline"
     cv2.putText(img, status, (16, 28), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 1, cv2.LINE_AA)
-    cv2.putText(img, f"estado: {res.state.value}", (16, 52), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 1)
+    cv2.putText(img, f"state: {res.state.value}", (16, 52), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 1)
     if res.face is None:
         return
     x1, y1, x2, y2 = res.face.bbox.astype(int)
@@ -70,7 +70,7 @@ def draw(img: np.ndarray, res, cfg: Config) -> None:
     cv2.rectangle(img, (x1, y1), (x2, y2), color, 2)
     for x, y in res.face.kps.astype(int):
         cv2.circle(img, (x, y), 3, color, -1)
-    label = f"rostro {res.face.score:.2f}"
+    label = f"face {res.face.score:.2f}"
     if res.quality and not res.quality.ok:
         label += f" · {res.quality.reason}"
     elif res.s_max > -1:
@@ -84,7 +84,7 @@ def cmd_live(args) -> None:
     cfg = Config(decision=DecisionConfig(announce_on_change=not args.no_change, announce_unknown=not args.quiet_unknown))
     gallery, history = open_stores(cfg)
     pipe = Pipeline(cfg, gallery)
-    print(f"Galería: {len(gallery.active())} identidades activas. 'q' sale, 'p' modo privacidad, 'w' = «¿quién es?».")
+    print(f"Gallery: {len(gallery.active())} active identities. 'q' quits, 'p' toggles privacy mode, 'w' = ask «¿quién es?».")
     privacy = False
     discard_counted = False
     asked = threading.Event()
@@ -93,15 +93,15 @@ def cmd_live(args) -> None:
     if args.listen:
         from .voice import VoiceListener
 
-        print("Cargando Whisper (la primera vez descarga ~145 MB; después funciona sin red)…")
-        listener = VoiceListener(on_ask=lambda _t: asked.set(), muted=is_speaking, on_text=lambda t: print(f"[oído] {t}"))
+        print("Loading Whisper (the first run downloads ~145 MB; afterwards it works offline)…")
+        listener = VoiceListener(on_ask=lambda _t: asked.set(), muted=is_speaking, on_text=lambda t: print(f"[heard] {t}"))
         listener.start()
-        print("Escuchando «¿quién es?»…")
+        print("Listening for «¿quién es?»…")
     with open_source(args.source) as src:
         for frame in src.frames():
             if privacy:
                 img = np.zeros_like(frame.image)
-                cv2.putText(img, "MODO PRIVACIDAD", (40, 80), cv2.FONT_HERSHEY_SIMPLEX, 1.2, (255, 255, 255), 2)
+                cv2.putText(img, "PRIVACY MODE", (40, 80), cv2.FONT_HERSHEY_SIMPLEX, 1.2, (255, 255, 255), 2)
             else:
                 if asked.is_set():
                     asked.clear()
@@ -111,7 +111,7 @@ def cmd_live(args) -> None:
                 if res.state == State.IDLE:
                     discard_counted = False
                 if res.state == State.DISCARDING and not discard_counted:
-                    history.count_discard()  # RN-04: sólo un evento anónimo en el contador del día
+                    history.count_discard()  # only an anonymous event in the day's counter
                     discard_counted = True
                 if pending_ask is not None:
                     pending_ask["face"] |= res.face is not None
@@ -121,7 +121,7 @@ def cmd_live(args) -> None:
                     ann = res.announcement
                     kind = {Zone.MATCH: "aviso", Zone.ABSTAIN: "abstencion", Zone.REJECT: "desconocido"}[ann.kind]
                     ident = next((i for i in gallery.active() if i.id == ann.identity_id), None)
-                    # Sin autorización de registro, el aviso se anota sin identidad.
+                    # Without consent to logging, the announcement is recorded without an identity.
                     consented = bool(ident and ident.consent.encounter_log)
                     history.log(Encounter(time.time(), kind, ann.identity_id if consented else None, ann.s_max, ann.latency_ms))
                     print(f"[{kind} · {ann.reason}] s={ann.s_max:.3f}  {ann.hits}/{ann.window}  {res.timings_ms}")
@@ -130,7 +130,7 @@ def cmd_live(args) -> None:
                     pending_ask = None
                 img = frame.image.copy()
                 draw(img, res, cfg)
-            cv2.imshow("MNEMO · vista del portador", img)
+            cv2.imshow("MNEMO · wearer view", img)
             key = cv2.waitKey(1) & 0xFF
             if key == ord("q"):
                 break
@@ -139,7 +139,7 @@ def cmd_live(args) -> None:
                 pipe.engine.reset()
             if key == ord("w"):
                 asked.set()
-            del frame  # RN-02: el cuadro no sobrevive al ciclo
+            del frame  # the frame does not outlive the cycle
     if listener:
         listener.stop()
     cv2.destroyAllWindows()
@@ -150,13 +150,13 @@ def cmd_enroll(args) -> None:
     gallery, _ = open_stores(cfg)
     pipe = Pipeline(cfg, gallery)
     print(
-        "\nCONSENTIMIENTO (P-04)\n"
+        "\nCONSENTIMIENTO\n"
         f"Finalidad: ayudar al portador a recordar quién es {args.name} cuando se encuentran.\n"
         "Qué se guarda: un vector numérico de 512 valores, cifrado. No se guardan fotos ni video.\n"
         "Dónde: sólo en este dispositivo. Plazo: 12 meses. Revocable en cualquier momento.\n"
     )
     if input("¿Acepta el titular del dato? [s/N] ").strip().lower() != "s":
-        print("Rechazado: no se capturó ninguna imagen (CU-01 A1).")
+        print("Rechazado: no se capturó ninguna imagen.")
         return
     notes = input("¿Autoriza notas de conversación? [s/N] ").strip().lower() == "s"
     log = input("¿Autoriza el registro de encuentros (7 días)? [s/N] ").strip().lower() == "s"
@@ -172,7 +172,7 @@ def cmd_enroll(args) -> None:
                     return
                 preview = frame.image.copy()
                 cv2.putText(preview, f"Toma: {shot}", (16, 36), cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 255), 2)
-                cv2.imshow("MNEMO · captura guiada", preview)
+                cv2.imshow("MNEMO · guided capture", preview)
                 key = cv2.waitKey(1) & 0xFF
                 if key == 27:
                     break
@@ -187,52 +187,52 @@ def cmd_enroll(args) -> None:
                     break
     cv2.destroyAllWindows()
     if not vecs:
-        print("Sin tomas válidas: no se creó plantilla.")
+        print("No valid shots: no template was created.")
         return
     ident = gallery.enroll(
         args.name, args.relation, template_from_shots(np.stack(vecs)),
         Consent(identification=True, notes=notes, encounter_log=log), valid_shots=len(vecs),
         context=args.context or "",
     )
-    flag = " (baja calidad: umbral elevado)" if ident.low_quality else ""
-    print(f"Plantilla activa para {ident.name} · {len(vecs)} tomas{flag} · id {ident.id[:8]}")
+    flag = " (low quality: raised threshold)" if ident.low_quality else ""
+    print(f"Active template for {ident.name} · {len(vecs)} shots{flag} · id {ident.id[:8]}")
 
 
 def cmd_list(_args) -> None:
     gallery, _ = open_stores(Config())
     for i in gallery.all():
-        state = "vencida" if i.expired else "activa"
-        print(f"{i.id[:8]}  {i.name:<16} {i.relation:<14} tomas={i.valid_shots}  {state}  «{i.phrase}»")
+        state = "expired" if i.expired else "active"
+        print(f"{i.id[:8]}  {i.name:<16} {i.relation:<14} shots={i.valid_shots}  {state}  «{i.phrase}»")
 
 
 def cmd_revoke(args) -> None:
     gallery, history = open_stores(Config())
     match = [i for i in gallery.all() if i.id.startswith(args.id)]
     if len(match) != 1:
-        raise SystemExit("Id ambiguo o inexistente")
+        raise SystemExit("Ambiguous or unknown id")
     gallery.revoke(match[0].id)
     history.forget_identity(match[0].id)
-    print(f"Plantilla de {match[0].name} borrada de forma irreversible.")
+    print(f"Template for {match[0].name} irreversibly deleted.")
 
 
 def main() -> None:
-    ap = argparse.ArgumentParser(prog="mnemo")
+    ap = argparse.ArgumentParser(prog="mnemo", description="MNEMO desktop test bench")
     sub = ap.add_subparsers(required=True)
-    p = sub.add_parser("live")
-    p.add_argument("--source", default="0", help="índice de cámara, URL de IP-cam o 'glasses'")
-    p.add_argument("--listen", action="store_true", help="micrófono abierto para «¿quién es?» (faster-whisper local)")
-    p.add_argument("--no-change", action="store_true", help="no avisar solo al cambiar de persona (sólo a pedido)")
-    p.add_argument("--quiet-unknown", action="store_true", help="no decir «no es nadie conocido» salvo que pregunten")
+    p = sub.add_parser("live", help="live recognition")
+    p.add_argument("--source", default="0", help="camera index, IP-cam URL or 'glasses'")
+    p.add_argument("--listen", action="store_true", help="open the microphone and listen for «¿quién es?» (local faster-whisper)")
+    p.add_argument("--no-change", action="store_true", help="do not announce on its own when the person changes (only on request)")
+    p.add_argument("--quiet-unknown", action="store_true", help="do not say «no es nadie conocido» unless asked")
     p.set_defaults(fn=cmd_live)
-    p = sub.add_parser("enroll")
-    p.add_argument("--name", required=True)
-    p.add_argument("--relation", required=True)
-    p.add_argument("--context")
-    p.add_argument("--source", default="0")
+    p = sub.add_parser("enroll", help="guided enrollment with consent")
+    p.add_argument("--name", required=True, help="name of the person to enroll")
+    p.add_argument("--relation", required=True, help="relation to the wearer, as it will be spoken (e.g. «tu hija»)")
+    p.add_argument("--context", help="optional context fact, stored only if notes are authorized")
+    p.add_argument("--source", default="0", help="camera index, IP-cam URL or 'glasses'")
     p.set_defaults(fn=cmd_enroll)
-    sub.add_parser("list").set_defaults(fn=cmd_list)
-    p = sub.add_parser("revoke")
-    p.add_argument("id")
+    sub.add_parser("list", help="list enrolled identities").set_defaults(fn=cmd_list)
+    p = sub.add_parser("revoke", help="irreversibly delete an identity and its encounter log")
+    p.add_argument("id", help="identity id (any unambiguous prefix)")
     p.set_defaults(fn=cmd_revoke)
     args = ap.parse_args()
     args.fn(args)

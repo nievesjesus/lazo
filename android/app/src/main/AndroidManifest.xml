@@ -1,15 +1,15 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
-    <!-- Meta Wearables DAT: enlace con las gafas vía Bluetooth. INTERNET lo exige el SDK para
-         la coordinación con la app Meta AI; el pipeline de MNEMO no abre ninguna conexión (RN-05). -->
+    <!-- Meta Wearables DAT: link to the glasses over Bluetooth. The SDK requires INTERNET for
+         coordination with the Meta AI app; the MNEMO pipeline opens no connections. -->
     <uses-permission android:name="android.permission.BLUETOOTH" />
     <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
     <uses-permission android:name="android.permission.INTERNET" />
-    <!-- Cámara del teléfono: implementación alternativa del banco de pruebas (sección 7.3). -->
+    <!-- Phone camera: alternative implementation for the test bench. -->
     <uses-permission android:name="android.permission.CAMERA" />
     <uses-feature android:name="android.hardware.camera" android:required="false" />
-    <!-- «¿Quién es?» por voz, reconocido en el dispositivo (SpeechRecognizer on-device). -->
+    <!-- «¿Quién es?» by voice, recognized on the device (on-device SpeechRecognizer). -->
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
 
     <application
@@ -31,7 +31,7 @@
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
-            <!-- Retorno desde la app Meta AI tras el registro / permisos. -->
+            <!-- Return from the Meta AI app after registration / permissions. -->
             <intent-filter>
                 <action android:name="android.intent.action.VIEW" />
                 <category android:name="android.intent.category.DEFAULT" />

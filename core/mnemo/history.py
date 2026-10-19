@@ -1,7 +1,7 @@
-"""Registro de encuentros (RF-14) y contador anónimo de descartes (RF-09, RN-04).
+"""Encounter log and anonymous discard counter.
 
-Sólo hora, identidad y similitud; nunca imágenes ni ubicación. Retención de 7 días.
-Los rostros sin coincidencia sólo incrementan un contador diario sin identificador.
+Only time, identity and similarity are stored; never images or location. 7-day retention.
+Faces with no match only increment a daily counter with no identifier.
 """
 from __future__ import annotations
 
@@ -16,7 +16,7 @@ DAY = 24 * 3600
 @dataclass
 class Encounter:
     ts: float
-    kind: str                # "aviso" | "abstencion" | "desconocido"
+    kind: str                # "aviso" (announced) | "abstencion" (abstained) | "desconocido" (unknown)
     identity_id: str | None
     similarity: float
     latency_ms: float
@@ -40,7 +40,7 @@ class History:
             self.db.execute("DELETE FROM encounters WHERE ts < ?", (time.time() - self.retention,))
 
     def log(self, e: Encounter) -> None:
-        """Si la persona no autorizó el registro, quien llama pasa ``identity_id=None``."""
+        """If the person did not consent to logging, the caller passes ``identity_id=None``."""
         with self.db:
             self.db.execute(
                 "INSERT INTO encounters VALUES (?, ?, ?, ?, ?, ?)",
@@ -56,7 +56,7 @@ class History:
             )
 
     def forget_identity(self, identity_id: str) -> None:
-        """RF-11: la revocación elimina también los registros asociados."""
+        """Revocation also deletes the associated records."""
         with self.db:
             self.db.execute("DELETE FROM encounters WHERE identity_id = ?", (identity_id,))
 

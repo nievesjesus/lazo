@@ -1,21 +1,21 @@
-// Escucha «¿quién es?» con el micrófono. Un detector de actividad de voz por energía recorta cada
-// frase y sólo esos fragmentos se transcriben con Whisper en un worker. El audio vive en memoria
-// durante la transcripción y se descarta (RN-02); nada se envía a la red.
+// Listens for «¿quién es?» through the microphone. An energy-based voice activity detector cuts out
+// each utterance and only those fragments are transcribed with Whisper in a worker. The audio lives in
+// memory during transcription and is then discarded; nothing is sent over the network.
 
 export type ListenerStatus = 'apagado' | 'cargando' | 'escuchando' | 'transcribiendo' | 'error';
 
 const SAMPLE_RATE = 16000;
 const FRAME = 1024; // 64 ms
-const PREROLL_FRAMES = 5; // ~320 ms antes del inicio detectado
+const PREROLL_FRAMES = 5; // ~320 ms before the detected onset
 const END_SILENCE_MS = 700;
 const MAX_SEGMENT_MS = 4000;
 const MIN_SPEECH_MS = 300;
 
-/** «¿quién es?», «¿quién está?», «¿cómo se llama?», «¿quién me habla?», «¿quién era?». */
-// Límites de palabra Unicode: \b de JS no reconoce la «á» como letra.
+/** Matches «¿quién es?», «¿quién está?», «¿cómo se llama?», «¿quién me habla?», «¿quién era?». */
+// Unicode word boundaries: JS's \b does not treat «á» as a letter.
 const ASK = /(?<!\p{L})(qui[eé]n\s+(es|est[aá]|era|ser[aá]|me\s+habla|viene)|c[oó]mo\s+se\s+llama)(?!\p{L})/iu;
 
-/** Whisper suele entender «¿Qué es?» cuando se dice «¿Quién es?»: se acepta sólo como frase completa. */
+/** Whisper often hears «¿Qué es?» when «¿Quién es?» is said: accepted only as a complete utterance. */
 const ASK_SHORT = /^[\s¿¡]*(qu[eé]|qui[eé]n)(\s+es)?[\s?!.]*$/iu;
 
 export function isAsk(text: string): boolean {
@@ -29,7 +29,7 @@ export class VoiceListener {
   private ctx: AudioContext | null = null;
   private stream: MediaStream | null = null;
   private seq = 0;
-  /** Mientras devuelva true (p. ej. el TTS está hablando) no se graba, para no transcribir la propia voz. */
+  /** While it returns true (e.g. the TTS is speaking) nothing is recorded, so the app does not transcribe its own voice. */
   muted: () => boolean = () => false;
 
   constructor(
@@ -73,19 +73,19 @@ export class VoiceListener {
         }
       };
     });
-    ready.catch(() => {}); // si falla el micrófono antes, el error se reporta desde start()
+    ready.catch(() => {}); // if the microphone fails first, the error is reported from start()
     this.worker.postMessage({ type: 'load' });
 
     this.stream = await navigator.mediaDevices.getUserMedia({
       audio: { channelCount: 1, echoCancellation: true, noiseSuppression: true, autoGainControl: true },
     });
-    // Se captura a la frecuencia nativa del dispositivo y se remuestrea a 16 kHz a mano: pedir un
-    // AudioContext de 16 kHz falla en Firefox y en algunos Safari al conectar el micrófono.
+    // Capture at the device's native rate and resample to 16 kHz by hand: asking for a 16 kHz
+    // AudioContext fails in Firefox and in some Safari versions when connecting the microphone.
     this.ctx = new AudioContext();
     await this.ctx.resume();
     const ratio = this.ctx.sampleRate / SAMPLE_RATE;
     const src = this.ctx.createMediaStreamSource(this.stream);
-    // ScriptProcessor alcanza para un VAD por energía; evita servir un AudioWorklet aparte.
+    // ScriptProcessor is enough for an energy-based VAD; it avoids serving a separate AudioWorklet.
     const proc = this.ctx.createScriptProcessor(nextPow2(FRAME * ratio), 1, 1);
     src.connect(proc);
     proc.connect(this.ctx.destination);
@@ -107,7 +107,7 @@ export class VoiceListener {
       for (let i = 0; i < x.length; i++) e += x[i] * x[i];
       const rms = Math.sqrt(e / x.length);
       const speaking = rms > Math.max(0.012, floor * 3);
-      if (!speaking) floor = 0.95 * floor + 0.05 * rms; // piso de ruido adaptativo
+      if (!speaking) floor = 0.95 * floor + 0.05 * rms; // adaptive noise floor
 
       if (!seg) {
         pre.push(x);
@@ -158,7 +158,7 @@ export class VoiceListener {
 
 const nextPow2 = (n: number) => 2 ** Math.round(Math.log2(n));
 
-/** Remuestreo a 16 kHz promediando cada bloque (filtro de caja como antialiasing básico). */
+/** Resamples to 16 kHz by averaging each block (a box filter as basic antialiasing). */
 function resample(input: Float32Array, ratio: number): Float32Array {
   if (Math.abs(ratio - 1) < 1e-3) return new Float32Array(input);
   const out = new Float32Array(Math.floor(input.length / ratio));

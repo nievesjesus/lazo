@@ -1,14 +1,14 @@
 import basicSsl from '@vitejs/plugin-basic-ssl';
 import { defineConfig } from 'vite';
 
-// COOP/COEP habilitan SharedArrayBuffer ⇒ WASM multihilo para onnxruntime-web.
+// COOP/COEP enable SharedArrayBuffer ⇒ multithreaded WASM for onnxruntime-web.
 const isolation = {
   'Cross-Origin-Opener-Policy': 'same-origin',
   'Cross-Origin-Embedder-Policy': 'require-corp',
 };
 
-// `npm run dev:phone` sirve por HTTPS en la red local: getUserMedia exige contexto seguro
-// para usar la cámara del teléfono.
+// `npm run dev:phone` serves over HTTPS on the local network: getUserMedia requires a secure
+// context to use the phone camera.
 export default defineConfig(({ mode }) => ({
   plugins: mode === 'phone' ? [basicSsl()] : [],
   server: { headers: isolation },

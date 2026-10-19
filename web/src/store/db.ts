@@ -1,4 +1,4 @@
-// IndexedDB mínimo. Todo queda en el origen de la app, en este navegador.
+// Minimal IndexedDB wrapper. Everything stays within the app's origin, in this browser.
 const DB_NAME = 'mnemo';
 const VERSION = 1;
 export const STORES = ['keys', 'identities', 'audit', 'encounters', 'counters', 'settings'] as const;

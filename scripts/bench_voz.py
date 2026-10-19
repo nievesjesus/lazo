@@ -1,8 +1,9 @@
-"""Latencia de «¿Quién es?» por voz: transcripción local con faster-whisper (mnemo.voice.Transcriber, CPU, int8).
+"""Latency of the «¿Quién es?» ("Who is it?") voice query: local transcription with faster-whisper
+(mnemo.voice.Transcriber, CPU, int8).
 
-Genera el WAV con la voz del sistema de macOS (igual que web/e2e/make_fixtures.py), lo pasa por el mismo VAD de
-energía que usa el listener para recortar la frase y mide cuánto tarda ``Transcriber`` en devolver el texto.
-Si el modelo no está en la caché de Hugging Face hay que descargarlo antes (se usa HF_HUB_OFFLINE=1 para no hacerlo aquí).
+Generates the WAV with the macOS system voice (like web/e2e/make_fixtures.py), passes it through the same energy
+VAD the listener uses to clip the phrase, and measures how long ``Transcriber`` takes to return the text.
+If the model is not in the Hugging Face cache it has to be downloaded beforehand (HF_HUB_OFFLINE=1 keeps this script from doing it).
 
     HF_HUB_OFFLINE=1 .venv/bin/python scripts/bench_voz.py [--model base] [--reps 10]
 """
@@ -40,7 +41,7 @@ def stats(xs) -> dict:
 
 
 def time_it(tr: Transcriber, audio: np.ndarray, reps: int) -> tuple[list[float], str]:
-    text = tr(audio)  # descartada: warm-up de CTranslate2
+    text = tr(audio)  # discarded: CTranslate2 warm-up
     xs = []
     for _ in range(reps):
         t0 = time.perf_counter()
@@ -50,7 +51,7 @@ def time_it(tr: Transcriber, audio: np.ndarray, reps: int) -> tuple[list[float],
 
 
 def main() -> None:
-    ap = argparse.ArgumentParser(description="Latencia de la voz local (faster-whisper)")
+    ap = argparse.ArgumentParser(description="Local voice latency (faster-whisper)")
     ap.add_argument("--model", default="base")
     ap.add_argument("--reps", type=int, default=10)
     ap.add_argument("--text", default="¿Quién es?")
@@ -60,13 +61,13 @@ def main() -> None:
     with tempfile.TemporaryDirectory() as d:
         speech = synth(args.text, Path(d))
     silence = lambda s: np.zeros(int(SAMPLE_RATE * s), dtype=np.float32)
-    clip = np.concatenate([silence(2), speech, silence(3)])   # mismo audio que quien.wav del e2e
+    clip = np.concatenate([silence(2), speech, silence(3)])   # same audio as quien.wav in the e2e
 
     segs: list[np.ndarray] = []
     vad = _Vad(segs.append)
     for i in range(0, len(clip) - FRAME, FRAME):
         vad.feed(clip[i:i + FRAME])
-    assert segs, "el VAD no recortó ninguna frase"
+    assert segs, "the VAD did not clip any phrase"
     seg = segs[0]
 
     t0 = time.perf_counter()
@@ -74,12 +75,12 @@ def main() -> None:
     load_ms = (time.perf_counter() - t0) * 1000
     t0 = time.perf_counter()
     first_text = tr(seg)
-    first_ms = (time.perf_counter() - t0) * 1000   # primera llamada (en frío, tras cargar el modelo)
+    first_ms = (time.perf_counter() - t0) * 1000   # first call (cold, right after loading the model)
 
     seg_ms, seg_text = time_it(tr, seg, args.reps)
     clip_ms, clip_text = time_it(tr, clip, args.reps)
     rep = {
-        "modelo": f"faster-whisper {args.model} (cpu, int8, beam=1, idioma es)",
+        "modelo": f"faster-whisper {args.model} (cpu, int8, beam=1, language es)",
         "entorno": {"cpu": subprocess.run(["sysctl", "-n", "machdep.cpu.brand_string"], capture_output=True, text=True).stdout.strip(),
                     "sistema": platform.platform(), "carga_inicial": os.getloadavg()},
         "voz_sintetica": VOICE, "frase": args.text,

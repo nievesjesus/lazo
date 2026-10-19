@@ -1,4 +1,4 @@
-"""Evaluación de calidad del cuadro/rostro (CU-02 pasos 1-2, RF-03)."""
+"""Frame/face quality assessment: detector confidence, face size, sharpness, brightness and pose."""
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -25,6 +25,7 @@ def assess(face: Face, crop112: np.ndarray, cfg: QualityConfig, allow_profile: b
     sh = sharpness(crop112)
     br = brightness(crop112)
     yaw = yaw_ratio(face.kps)
+    # The reasons are shown to the person being enrolled as retake guidance, so they stay in Spanish.
     reason = None
     if face.score < cfg.min_det_score:
         reason = "detección débil"

@@ -1,14 +1,14 @@
-"""Etapa 07 · Decisión con rechazo (sección 7.4; Bishop y Bishop, 2024, §5.2.3).
+"""Stage 07 · Decision with rejection (Bishop and Bishop, 2024, §5.2.3).
 
-Regla de tres zonas sobre s_máx:
-    s_máx ≥ τ_alta          → afirmar, sujeto a confirmación temporal 3 de 4
-    τ_baja ≤ s_máx < τ_alta → abstenerse: «no estoy seguro», sin nombrar
-    s_máx < τ_baja          → nadie del círculo: no se registra nada biométrico (RF-09)
+Three-zone rule over s_max:
+    s_max ≥ τ_high            → assert, subject to temporal confirmation (3 of 4)
+    τ_low ≤ s_max < τ_high    → abstain: "not sure", without naming anyone
+    s_max < τ_low             → nobody in the circle: nothing biometric is recorded
 
-Máquina de estados de la tabla 6. Un encuentro produce a lo sumo una frase (RN-08) y termina
-cuando no hay rostro durante ``encounter_gap_ms`` o cuando CAMBIA LA PERSONA: el embedding del
-cuadro deja de parecerse al del rostro ya anunciado (el «ancla») durante ``change_frames``
-cuadros seguidos. El cambio se detecta por continuidad del rostro, no por identidad.
+State machine: an encounter produces at most one phrase and ends when there is no face for
+``encounter_gap_ms`` or when THE PERSON CHANGES: the frame's embedding stops resembling that
+of the already announced face (the "anchor") for ``change_frames`` consecutive frames. The
+change is detected by face continuity, not by identity.
 """
 from __future__ import annotations
 
@@ -45,24 +45,24 @@ def classify(s_max: float, tau_low: float, tau_high: float) -> Zone:
 
 @dataclass
 class Observation:
-    """Resultado de un cuadro ya procesado. ``identity_id`` es None si no hubo rostro útil."""
+    """Result of an already processed frame. ``identity_id`` is None if there was no usable face."""
     t_ms: float
     face_present: bool
     usable: bool
     identity_id: str | None = None
     s_max: float = -1.0
     weak_template: bool = False
-    embedding: np.ndarray | None = None  # sólo en memoria, para detectar el cambio de persona
+    embedding: np.ndarray | None = None  # in memory only, to detect a change of person
 
 
 @dataclass
 class Announcement:
-    kind: Zone      # MATCH ⇒ nombrar · ABSTAIN ⇒ «no estoy seguro» · REJECT ⇒ «no es nadie conocido»
+    kind: Zone      # MATCH ⇒ name the person · ABSTAIN ⇒ "someone is there, not recognized" · REJECT ⇒ "nobody known"
     identity_id: str | None
     s_max: float
     hits: int
     window: int
-    reason: str = "encuentro"  # "encuentro" | "cambio" | "pedido"
+    reason: str = "encuentro"  # "encuentro" (encounter) | "cambio" (change) | "pedido" (request)
     latency_ms: float = 0.0
 
 
@@ -86,7 +86,7 @@ class DecisionEngine:
         self.silent = False
 
     def request(self) -> None:
-        """«¿Quién es?»: encuentro nuevo inmediato, sin permanencia mínima, que siempre responde."""
+        """The wearer asked "who is it?": new encounter right away, no minimum dwell, and it always answers."""
         self.reset()
         self.skip_dwell = True
         self.reason = "pedido"
@@ -102,7 +102,7 @@ class DecisionEngine:
         self.announced = False
         self.anchor = None
         self.change_count = 0
-        self.skip_dwell = True  # la persona ya está frente al portador
+        self.skip_dwell = True  # the person is already in front of the wearer
         self.reason = "cambio"
         self.silent = not self.cfg.announce_on_change
         self.state = State.OBSERVING
@@ -113,7 +113,7 @@ class DecisionEngine:
             return False
         if float(self.anchor @ emb) >= self.cfg.change_threshold:
             self.change_count = 0
-            a = 0.85 * self.anchor + 0.15 * emb  # el ancla acompaña cambios de pose y luz
+            a = 0.85 * self.anchor + 0.15 * emb  # the anchor follows pose and lighting changes
             self.anchor = a / np.linalg.norm(a)
             return False
         self.change_count += 1
@@ -143,7 +143,7 @@ class DecisionEngine:
         self.last_seen_ms = obs.t_ms
 
         if self.announced:
-            # RN-08: silencio mientras sea la misma persona; un cambio abre un encuentro nuevo.
+            # Stay silent while it is the same person; a change opens a new encounter.
             if obs.usable and obs.embedding is not None and self._tracks_change(obs.embedding):
                 self._new_encounter(obs.t_ms)
             else:
@@ -152,7 +152,7 @@ class DecisionEngine:
         if not obs.usable:
             self.failed += 1
             if self.failed >= cfg.max_failed_frames:
-                # CU-02 E1: se interrumpe el ciclo sin avisar; se reintenta desde cero.
+                # Too many unusable frames: interrupt the cycle silently and retry from scratch.
                 self.window.clear()
                 self.failed = 0
                 self.first_seen_ms = obs.t_ms
@@ -169,7 +169,7 @@ class DecisionEngine:
             return None
         latency = obs.t_ms - self.first_seen_ms
 
-        # Confirmación temporal: misma identidad ganadora en ≥ 3 de los últimos 4 cuadros.
+        # Temporal confirmation: same winning identity in ≥ 3 of the last 4 frames.
         votes: dict[str, int] = {}
         for z, ident, _ in self.window:
             if z == Zone.MATCH and ident:

@@ -1,12 +1,12 @@
-// Etapas 03 y 05: RetinaFace-500MF (SCRFD) y MobileFaceNet (ArcFace) con onnxruntime-web.
-// Los mismos archivos ONNX que usa core/ — servidos desde el propio origen, sin red externa.
+// Stages 03 and 05: SCRFD-500MF and MobileFaceNet (ArcFace) with onnxruntime-web.
+// The same ONNX files that core/ uses — served from our own origin, with no external network.
 import * as ort from 'onnxruntime-web/wasm';
 import wasmUrl from 'onnxruntime-web/ort-wasm-simd-threaded.wasm?url';
 
 import { DET_SIZE } from './config';
 import type { Point } from './imageops';
 
-// El bundle ya incluye el glue JS; sólo el binario .wasm se sirve aparte, desde el mismo origen.
+// The bundle already includes the JS glue; only the .wasm binary is served separately, from the same origin.
 ort.env.wasm.wasmPaths = { wasm: wasmUrl };
 ort.env.wasm.numThreads = self.crossOriginIsolated ? Math.min(4, navigator.hardwareConcurrency || 1) : 1;
 
@@ -61,7 +61,7 @@ export class FaceDetector {
     ctx.drawImage(source, 0, 0, Math.round(w0 * scale), Math.round(h0 * scale));
     const px = ctx.getImageData(0, 0, S, S).data;
 
-    // NCHW, RGB, (x − 127,5) / 128
+    // NCHW, RGB, (x − 127.5) / 128
     const plane = S * S;
     const input = new Float32Array(3 * plane);
     for (let i = 0, j = 0; j < plane; i += 4, j++) {
@@ -70,7 +70,7 @@ export class FaceDetector {
       input[j + 2 * plane] = (px[i + 2] - 127.5) / 128;
     }
     const out = await this.session.run({ [this.session.inputNames[0]]: new ort.Tensor('float32', input, [1, 3, S, S]) });
-    const names = this.session.outputNames; // orden: scores×3, bbox×3, kps×3
+    const names = this.session.outputNames; // order: scores×3, bbox×3, kps×3
 
     const faces: Face[] = [];
     STRIDES.forEach((stride, si) => {
@@ -94,7 +94,7 @@ export class FaceDetector {
         faces.push({ box, score: scores[k], kps: pts });
       }
     });
-    // CU-02 A3: con varios rostros se prioriza el más cercano (el más alto).
+    // With several faces, the closest one (the tallest) takes priority.
     return nms(faces).sort((a, b) => faceHeight(b) - faceHeight(a));
   }
 }
@@ -106,7 +106,7 @@ export class FaceEmbedder {
     return new FaceEmbedder(await createSession(`${import.meta.env.BASE_URL}models/w600k_mbf.onnx`));
   }
 
-  /** Recorte alineado 112×112 → vector de 512 normalizado (ec. 5 ⇒ coseno = producto interno). */
+  /** Aligned 112×112 crop → normalized 512-dim vector (so cosine similarity = inner product). */
   async embed(crop: ImageData): Promise<Float32Array> {
     const plane = 112 * 112;
     const input = new Float32Array(3 * plane);
@@ -136,7 +136,7 @@ export function dot(a: Float32Array, b: Float32Array): number {
   return s;
 }
 
-/** RF-04: centroide normalizado de las tomas válidas. */
+/** Normalized centroid of the valid shots. */
 export function centroid(vs: Float32Array[]): Float32Array {
   const c = new Float32Array(vs[0].length);
   for (const v of vs) for (let i = 0; i < c.length; i++) c[i] += v[i];

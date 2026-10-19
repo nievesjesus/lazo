@@ -1,5 +1,5 @@
-// P-07 / P-08 · Vista del portador. Por defecto: un marco suave alrededor de la cara. Con «detalles
-// técnicos»: recuadro de detección, cinco puntos y etiqueta de calidad (para la presentación).
+// Wearer view. By default: a soft frame around the face. With «technical details»: detection
+// box, five landmarks and a quality label (for demos).
 import type { FrameResult } from '../pipeline/pipeline';
 import { num } from './util';
 
@@ -33,7 +33,7 @@ export function drawFrame(
   const unit = Math.max(1.5, canvas.width / 640);
 
   if (!details) {
-    // Esquinas redondeadas: indican «estoy mirando esta cara» sin datos técnicos.
+    // Rounded corners: signal «I'm looking at this face» without technical details.
     const w = x2 - x1, h = y2 - y1, pad = 0.08 * w;
     const L = Math.min(w, h) * 0.22;
     const [a, b, c, d] = [x1 - pad, y1 - pad, x2 + pad, y2 + pad];

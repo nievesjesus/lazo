@@ -1,4 +1,4 @@
-// Mismos valores por defecto que core/mnemo/config.py (secciones 5 y 7 de la pre-entrega).
+// Same defaults as core/mnemo/config.py.
 
 export const QUALITY = {
   minFacePx: 80,
@@ -18,13 +18,13 @@ export interface DecisionConfig {
   dwellMs: number;
   encounterGapMs: number;
   maxFailedFrames: number;
-  /** Coseno mínimo entre el rostro anunciado y el actual para considerarlo la misma persona. */
+  /** Minimum cosine between the announced face and the current one to treat them as the same person. */
   changeThreshold: number;
-  /** Cuadros seguidos por debajo de `changeThreshold` para declarar un cambio de persona. */
+  /** Consecutive frames below `changeThreshold` needed to declare a change of person. */
   changeFrames: number;
-  /** Al cambiar de persona, anunciar sin que el portador pregunte. */
+  /** On a change of person, announce without the wearer asking. */
   announceOnChange: boolean;
-  /** Decir «no es nadie conocido» sin que el portador pregunte (a pedido siempre se responde). */
+  /** Say «no es nadie conocido» without the wearer asking (on request it is always answered). */
   announceUnknown: boolean;
 }
 

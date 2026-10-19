@@ -37,11 +37,11 @@ data class Identity(
 }
 
 /**
- * Galería cerrada y cifrada (RF-05, RF-11, RF-12, RN-01, RN-06).
+ * Closed, encrypted gallery.
  *
- * Clave AES-256-GCM no exportable en el Android Keystore (respaldada por TEE/StrongBox cuando existe).
- * Cada identidad es un blob cifrado con el id como dato asociado. Nunca se guarda una imagen.
- * Búsqueda 1:N exhaustiva sobre N ≤ 50 (tabla 7).
+ * Non-exportable AES-256-GCM key in the Android Keystore (backed by TEE/StrongBox when available).
+ * Each identity is an encrypted blob with the id as associated data. An image is never stored.
+ * Exhaustive 1:N search over N ≤ 50.
  */
 class SecureGallery(ctx: Context, private val maxSize: Int = 50) {
   private val db = Helper(ctx).writableDatabase
@@ -69,10 +69,10 @@ class SecureGallery(ctx: Context, private val maxSize: Int = 50) {
     return best to s
   }
 
-  /** RN-01: sólo lo invoca el flujo de alta tras el consentimiento del titular. */
+  /** Only invoked by the enrollment flow, after the person has given consent. */
   fun enroll(name: String, relation: String, template: FloatArray, consent: Consent, validShots: Int, phrase: String? = null, context: String = ""): Identity {
-    require(consent.identification) { "Sin consentimiento de identificación no se crea plantilla" }
-    check(cache.size < maxSize) { "La galería admite hasta $maxSize identidades" }
+    require(consent.identification) { "No template is created without identification consent" }
+    check(cache.size < maxSize) { "The gallery holds at most $maxSize identities" }
     val now = System.currentTimeMillis()
     val ident = Identity(
         UUID.randomUUID().toString(), name, relation, phrase ?: "Es $name, $relation.",
@@ -84,7 +84,7 @@ class SecureGallery(ctx: Context, private val maxSize: Int = 50) {
     return ident
   }
 
-  /** RF-11 / RN-06: borrado inmediato e irreversible; sólo queda la constancia de la operación. */
+  /** Immediate, irreversible deletion; only the record of the operation remains. */
   fun revoke(id: String, by: String = "titular") {
     db.delete("identities", "id = ?", arrayOf(id))
     audit("revocacion", id, by)
@@ -98,7 +98,7 @@ class SecureGallery(ctx: Context, private val maxSize: Int = 50) {
     })
   }
 
-  // --- cifrado ------------------------------------------------------------------
+  // --- encryption ---------------------------------------------------------------
   private fun key(): SecretKey {
     val ks = KeyStore.getInstance("AndroidKeyStore").apply { load(null) }
     (ks.getKey(KEY_ALIAS, null) as? SecretKey)?.let { return it }

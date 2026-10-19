@@ -1,4 +1,4 @@
-// Avisos breves (toast) y diálogo de confirmación, en lugar de alert()/confirm() del navegador.
+// Brief notices (toast) and a confirmation dialog, instead of the browser's alert()/confirm().
 import { esc } from './util';
 
 export function toast(text: string, kind: 'info' | 'ok' | 'warn' = 'info', ms = 3500) {

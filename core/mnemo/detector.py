@@ -1,7 +1,7 @@
-"""Etapa 03 · Detección con RetinaFace-500MF (SCRFD, paquete buffalo_sc de InsightFace).
+"""Stage 03 · Detection with SCRFD-500MF (InsightFace buffalo_sc package).
 
-Una sola pasada entrega cajas, puntaje y cinco puntos de referencia. Decodificación de
-anclas por stride (8/16/32, dos anclas por celda) y supresión de no máximos por IoU.
+A single pass returns boxes, score and five landmarks. Anchors are decoded per stride
+(8/16/32, two anchors per cell), followed by IoU-based non-maximum suppression.
 """
 from __future__ import annotations
 
@@ -18,9 +18,9 @@ NUM_ANCHORS = 2
 
 @dataclass
 class Face:
-    bbox: np.ndarray   # (4,) x1, y1, x2, y2 en coordenadas del cuadro original
+    bbox: np.ndarray   # (4,) x1, y1, x2, y2 in original-frame coordinates
     score: float
-    kps: np.ndarray    # (5, 2): ojo izq., ojo der., nariz, comisura izq., comisura der.
+    kps: np.ndarray    # (5, 2): left eye, right eye, nose, left mouth corner, right mouth corner
 
     @property
     def height(self) -> float:
@@ -32,7 +32,7 @@ class Face:
 
 
 def iou(a: np.ndarray, b: np.ndarray) -> np.ndarray:
-    """IoU entre una caja ``a`` (4,) y un conjunto ``b`` (N, 4)."""
+    """IoU between one box ``a`` (4,) and a set ``b`` (N, 4)."""
     x1 = np.maximum(a[0], b[:, 0])
     y1 = np.maximum(a[1], b[:, 1])
     x2 = np.minimum(a[2], b[:, 2])
@@ -72,7 +72,7 @@ class FaceDetector:
         return self._centers[key]
 
     def detect(self, img_bgr: np.ndarray, score_thresh: float = 0.5, max_faces: int = 0) -> list[Face]:
-        # Letterbox: reescala conservando proporción y rellena a size×size.
+        # Letterbox: rescale keeping the aspect ratio and pad to size×size.
         h0, w0 = img_bgr.shape[:2]
         scale = self.size / max(h0, w0)
         nh, nw = int(round(h0 * scale)), int(round(w0 * scale))
@@ -107,5 +107,5 @@ class FaceDetector:
         kps = np.concatenate(all_kps) / scale
         keep = nms(boxes, scores)
         faces = [Face(bbox=boxes[k], score=float(scores[k]), kps=kps[k]) for k in keep]
-        faces.sort(key=lambda f: f.height, reverse=True)  # CU-02 A3: el más cercano primero
+        faces.sort(key=lambda f: f.height, reverse=True)  # largest (closest) face first
         return faces[:max_faces] if max_faces else faces

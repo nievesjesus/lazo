@@ -12,12 +12,12 @@ import kotlin.math.ln
 import kotlin.math.pow
 import kotlin.math.sin
 
-/** Plantilla canónica de ArcFace sobre 112×112. */
+/** Canonical ArcFace template on 112×112. */
 val ARCFACE_TEMPLATE = arrayOf(
     floatArrayOf(38.2946f, 51.6963f), floatArrayOf(73.5318f, 51.5014f), floatArrayOf(56.0252f, 71.7366f),
     floatArrayOf(41.5493f, 92.3655f), floatArrayOf(70.7299f, 92.2041f))
 
-/** Etapa 04 · similitud de 4 gdl por mínimos cuadrados (Umeyama 2D, forma cerrada). [a, b, tx, c, d, ty]. */
+/** Stage 04 · 4-DoF least-squares similarity transform (2D Umeyama, closed form). [a, b, tx, c, d, ty]. */
 fun similarityTransform(src: Array<FloatArray>, dst: Array<FloatArray> = ARCFACE_TEMPLATE): FloatArray {
   val n = src.size
   var msx = 0.0; var msy = 0.0; var mdx = 0.0; var mdy = 0.0
@@ -52,7 +52,7 @@ fun gray(bmp: Bitmap): FloatArray {
   return FloatArray(px.size) { val p = px[it]; 0.299f * ((p shr 16) and 0xff) + 0.587f * ((p shr 8) and 0xff) + 0.114f * (p and 0xff) }
 }
 
-/** V = Var(∇²I) con la máscara [[0,1,0],[1,−4,1],[0,1,0]] (ec. 1). */
+/** V = Var(∇²I) with the mask [[0,1,0],[1,−4,1],[0,1,0]] (variance of the Laplacian). */
 fun sharpness(g: FloatArray, w: Int, h: Int): Float {
   var sum = 0.0; var sum2 = 0.0; var n = 0
   for (y in 1 until h - 1) for (x in 1 until w - 1) {
@@ -64,7 +64,7 @@ fun sharpness(g: FloatArray, w: Int, h: Int): Float {
   return (sum2 / n - mean * mean).toFloat()
 }
 
-/** Corrección de intensidad por potencia hacia una media objetivo (etapa 02). */
+/** Power-law intensity correction toward a target mean (stage 02). */
 fun gammaCorrect(src: Bitmap, target: Float = 120f): Bitmap {
   val g = gray(src)
   val mean = (g.average().toFloat().coerceAtLeast(1f)) / 255f

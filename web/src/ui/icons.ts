@@ -1,4 +1,4 @@
-// Íconos de trazo (24×24, currentColor). Inline para no depender de fuentes ni CDNs (RN-05).
+// Stroke icons (24×24, currentColor). Inline so we depend on neither fonts nor CDNs.
 const paths: Record<string, string> = {
   home: '<path d="M3 11.5 12 4l9 7.5"/><path d="M5.5 10v10h13V10"/>',
   users: '<circle cx="9" cy="8" r="3.5"/><path d="M2.5 20c.8-3.6 3.4-5.5 6.5-5.5s5.7 1.9 6.5 5.5"/><circle cx="17" cy="9" r="2.5"/><path d="M16.5 14.6c2.4.2 4.2 1.9 5 4.9"/>',

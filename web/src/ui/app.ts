@@ -21,7 +21,7 @@ const TABS: { key: Tab; label: string; icon: string }[] = [
   { key: 'ajustes', label: 'Ajustes', icon: 'sliders' },
 ];
 
-/** Tres niveles de seguridad en lugar de un número: τ_alta para cada uno. */
+/** Three safety levels instead of a number: the τ_high for each one. */
 const SAFETY = [
   { key: 'rapido', label: 'Rápido', tau: 0.34, text: 'Reconoce enseguida, pero se equivoca de nombre con más frecuencia.' },
   { key: 'equilibrado', label: 'Equilibrado', tau: 0.38, text: 'Recomendado. Casi nunca nombra mal y rara vez se queda callado.' },
@@ -32,7 +32,7 @@ const STATE_LABEL: Record<string, string> = {
   en_reposo: 'en reposo', observando: 'observando', afirmando: 'afirmando', absteniendose: 'absteniéndose', descartando: 'descartando',
 };
 
-/** Motivos de calidad en palabras simples, con una indicación accionable. */
+/** Quality reasons in plain words, each with an actionable hint. */
 const FRIENDLY: Record<string, string> = {
   'rostro pequeño': 'Está lejos · acercate un poco',
   borroso: 'Imagen movida · quedate quieto un momento',
@@ -60,7 +60,7 @@ export class App {
   private discardCounted = false;
   private cameraError: string | null = null;
   private galleryEmpty = true;
-  /** «¿Quién es?» pendiente de respuesta: si vence sin aviso, se explica por qué (nadie / cara poco visible). */
+  /** «¿Quién es?» awaiting an answer: if it times out with no announcement, explain why (nobody there / face barely visible). */
   private pendingAsk: { at: number; sawFace: boolean } | null = null;
   private listener = new VoiceListener(
     () => this.ask(),
@@ -89,8 +89,8 @@ export class App {
     } else this.renderPaused();
   }
 
-  // ================================================================ acciones globales
-  /** «¿Quién es?» por botón, barra espaciadora o voz: encuentro nuevo que siempre responde. */
+  // ================================================================ global actions
+  /** «¿Quién es?» via button, space bar or voice: a new encounter that always answers. */
   private ask() {
     if (this.settings.privacyMode) return;
     this.pipe.engine.request();
@@ -143,7 +143,7 @@ export class App {
   }
 
   private startListening() {
-    this.listener.start().catch(() => { /* el estado de error ya se muestra */ });
+    this.listener.start().catch(() => { /* the error state is already shown */ });
   }
 
   private onListenerStatus(s: ListenerStatus, detail?: string) {
@@ -164,7 +164,7 @@ export class App {
     }
   }
 
-  // ================================================================ cámara y ciclo
+  // ================================================================ camera and loop
   private async startCamera() {
     this.source?.stop();
     this.cameraError = null;
@@ -233,7 +233,7 @@ export class App {
   private async onResult(res: FrameResult) {
     if (res.state === 'en_reposo') this.discardCounted = false;
     if (res.state === 'descartando' && !this.discardCounted) {
-      await history.countDiscard(); // RN-04: sólo un evento anónimo en el contador del día
+      await history.countDiscard(); // only an anonymous event in the day's counter
       this.discardCounted = true;
     }
     const ann = res.announcement;
@@ -243,7 +243,7 @@ export class App {
     speak(res.phrase, this.settings.voice);
     this.showEar(res.phrase, ann.kind !== 'match');
     if (this.settings.onDemand) this.demand.until = 0;
-    // Sin autorización de registro, el aviso se anota sin identidad (P-04, tercer permiso).
+    // Without permission to log encounters, the announcement is recorded without an identity.
     const consented = !!res.identity?.consent.encounterLog;
     await history.log({
       ts: Date.now(),
@@ -267,7 +267,7 @@ export class App {
     this.showEar(phrase, true);
   }
 
-  // ================================================================ vista del portador
+  // ================================================================ wearer view
   private setStatus(text: string, tone: 'ok' | 'warn' | 'idle' | 'live') {
     const el = document.getElementById('status');
     if (!el) return;
@@ -309,7 +309,7 @@ export class App {
     } else {
       card.innerHTML = '';
       const last = this.lastAnnouncement?.res;
-      // Mientras siga la misma persona (encuentro ya anunciado), se mantiene su nombre en el estado.
+      // While it is still the same person (encounter already announced), their name stays in the status.
       const same = this.pipe.engine.announced && last?.announcement && res?.face;
       if (same && last.announcement!.kind === 'match' && last.identity) this.setStatus(last.identity.name, 'ok');
       else if (same && last.announcement!.kind === 'unknown') this.setStatus('No es nadie conocido', 'idle');
@@ -326,7 +326,7 @@ export class App {
       : '';
   }
 
-  /** Superposición del video: círculo vacío, cámara sin permiso o pausa. */
+  /** Video overlay: empty circle, camera without permission, or paused. */
   private renderOverlay() {
     const el = $('#overlay');
     if (this.settings.privacyMode) {
@@ -352,7 +352,7 @@ export class App {
     this.renderOverlay();
   }
 
-  // ================================================================ estructura
+  // ================================================================ structure
   private shell() {
     return `
     <header class="topbar">
@@ -430,7 +430,7 @@ export class App {
     });
   }
 
-  // ================================================================ app del cuidador
+  // ================================================================ caregiver app
   private async renderPhone() {
     if (this.enrolling) return;
     this.galleryEmpty = (await gallery.list()).length === 0;
@@ -489,7 +489,7 @@ export class App {
       </div>`;
   }
 
-  /** Lista de encuentros; los no reconocidos consecutivos se agrupan en una sola fila. */
+  /** List of encounters; consecutive unrecognized ones are grouped into a single row. */
   private timeline(list: history.Encounter[], ids: gallery.Identity[], withReport: boolean) {
     const out: string[] = [];
     for (let i = 0; i < list.length; i++) {
@@ -785,7 +785,7 @@ export class App {
     }
   }
 
-  // ================================================================ alta con consentimiento (CU-01)
+  // ================================================================ enrollment with consent
   private wizard(step: number, title: string, body: string, opts: { dark?: boolean } = {}) {
     const names = ['Invitación', 'Permiso', 'Fotos', 'Datos'];
     return `
@@ -820,7 +820,7 @@ export class App {
     };
     const bindClose = (onClose: () => void) => { $('#wiz-close', screen).onclick = onClose; };
 
-    // P-02 · Invitación
+    // Step 1 · Invitation
     const code = Array.from(crypto.getRandomValues(new Uint8Array(3)), (b) => b.toString(16).padStart(2, '0')).join('').toUpperCase();
     screen.innerHTML = this.wizard(0, replacing ? `Rehacer las fotos de ${esc(replacing.name)}` : 'Invitá a alguien de confianza', `
       <div class="panel center"><div class="qr">${fakeQr(code)}</div><b>MN-${code}</b><small class="muted">Sirve una sola vez y vence en ${ENROLLMENT.inviteTtlHours} h</small></div>
@@ -834,7 +834,7 @@ export class App {
     const step1 = await new Promise<boolean>((r) => { $('#go', screen).onclick = () => r(true); bindClose(() => r(false)); });
     if (!step1) return finish();
 
-    // P-04 · Consentimiento (antecede a la captura)
+    // Step 2 · Consent (comes before the capture)
     screen.innerHTML = this.wizard(1, 'Tu cara, tus reglas', `
       <ul class="consent">
         <li>${icon('glasses', 20)}<div><b>Para qué</b><span>Para que quien usa las gafas escuche tu nombre cuando te encuentre.</span></div></li>
@@ -866,7 +866,7 @@ export class App {
       return finish();
     }
 
-    // P-03 · Captura guiada
+    // Step 3 · Guided capture
     const vecs = await this.guidedCapture(screen);
     if (!vecs) return finish();
     if (!vecs.length) {
@@ -874,7 +874,7 @@ export class App {
       return finish();
     }
     const template = centroid(vecs);
-    vecs.length = 0; // los vectores por toma también se descartan: sólo queda el centroide
+    vecs.length = 0; // the per-shot vectors are discarded too: only the centroid remains
 
     if (replacing) {
       await gallery.revoke(replacing.id, 'regeneracion');
@@ -886,7 +886,7 @@ export class App {
       return finish();
     }
 
-    // P-05 · Datos (los completa el cuidador)
+    // Step 4 · Details (filled in by the caregiver)
     screen.innerHTML = this.wizard(3, '¿Quién es?', `
       <div class="panel form">
         <label>Nombre<input id="f-name" placeholder="Marta" autocomplete="off" /></label>
@@ -916,7 +916,7 @@ export class App {
       validShots: this.lastValidShots,
     });
 
-    // Listo
+    // Done
     screen.innerHTML = `
       <div class="wizard done">
         <div class="done-mark">${icon('check', 40)}</div>
@@ -938,7 +938,7 @@ export class App {
 
   private lastValidShots = 0;
 
-  /** Cinco tomas guiadas con verificación de detección, tamaño, nitidez y pose. Devuelve vectores o null si se cancela. */
+  /** Five guided shots, checking detection, size, sharpness and pose. Returns the vectors, or null if cancelled. */
   private async guidedCapture(screen: HTMLElement): Promise<Float32Array[] | null> {
     const shots = ENROLLMENT.shots;
     screen.innerHTML = this.wizard(2, 'Fotos guiadas', `
@@ -1010,7 +1010,7 @@ export class App {
   }
 }
 
-/** Lee el reporte de `mnemo-eval` y elige la curva DET de la galería más cercana al tamaño actual. */
+/** Reads the `mnemo-eval` report and picks the DET curve whose gallery size is closest to the current one. */
 async function parseCalibration(text: string, n: number): Promise<Calibration> {
   const rep = JSON.parse(text) as Record<string, { det: { tau: number[]; fpir: number[]; fnir: number[] }; N_test: number }>;
   const entries = Object.values(rep).filter((r) => r?.det?.tau?.length);
@@ -1019,7 +1019,7 @@ async function parseCalibration(text: string, n: number): Promise<Calibration> {
   return { ...best.det, galleryN: best.N_test };
 }
 
-/** QR decorativo (determinista a partir del código). La app real genera un QR de verdad con el token firmado. */
+/** Decorative QR (deterministic from the code). The real app generates an actual QR with the signed token. */
 function fakeQr(code: string) {
   let seed = [...code].reduce((a, c) => a * 31 + c.charCodeAt(0), 7);
   const rnd = () => ((seed = (seed * 1103515245 + 12345) & 0x7fffffff) / 0x7fffffff);

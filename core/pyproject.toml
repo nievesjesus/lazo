@@ -1,7 +1,7 @@
 [project]
 name = "mnemo"
 version = "0.1.0"
-description = "MNEMO — reconocimiento facial consentido como apoyo a la memoria social (banco de pruebas)"
+description = "MNEMO — consented face recognition as a social-memory aid (test bench)"
 requires-python = ">=3.10"
 dependencies = ["numpy>=1.26", "opencv-python>=4.9", "onnxruntime>=1.18", "cryptography>=42"]
 

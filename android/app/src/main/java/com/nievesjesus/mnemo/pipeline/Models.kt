@@ -22,13 +22,13 @@ private fun session(env: OrtEnvironment, ctx: Context, asset: String): OrtSessio
   val bytes = ctx.assets.open(asset).use { it.readBytes() }
   val opts = OrtSession.SessionOptions().apply {
     setOptimizationLevel(OrtSession.SessionOptions.OptLevel.ALL_OPT)
-    // NNAPI (tabla 7): permite comparar CPU vs. acelerador sin cambiar el modelo.
+    // NNAPI: lets us compare CPU vs. accelerator without changing the model.
     runCatching { addNnapi() }
   }
   return env.createSession(bytes, opts)
 }
 
-/** Etapa 03 · RetinaFace-500MF (SCRFD). Misma decodificación que core/mnemo/detector.py. */
+/** Stage 03 · SCRFD-500MF. Same decoding as core/mnemo/detector.py. */
 class FaceDetector(ctx: Context, private val size: Int = 640) : AutoCloseable {
   private val env = OrtEnvironment.getEnvironment()
   private val sess = session(env, ctx, "models/det_500m.onnx")
@@ -76,7 +76,7 @@ class FaceDetector(ctx: Context, private val size: Int = 640) : AutoCloseable {
         }
       }
     }
-    return nms(faces).sortedByDescending { it.height } // CU-02 A3: el más cercano primero
+    return nms(faces).sortedByDescending { it.height } // closest face first
   }
 
   private fun nms(faces: List<Face>, thresh: Float = 0.4f): List<Face> {
@@ -95,7 +95,7 @@ class FaceDetector(ctx: Context, private val size: Int = 640) : AutoCloseable {
   override fun close() = sess.close()
 }
 
-/** Etapa 05 · MobileFaceNet (ArcFace, WebFace600K) → vector de 512 normalizado. */
+/** Stage 05 · MobileFaceNet (ArcFace, WebFace600K) → normalized 512-dim vector. */
 class FaceEmbedder(ctx: Context) : AutoCloseable {
   private val env = OrtEnvironment.getEnvironment()
   private val sess = session(env, ctx, "models/w600k_mbf.onnx")
@@ -134,7 +134,7 @@ fun dot(a: FloatArray, b: FloatArray): Float {
   return s
 }
 
-/** RF-04: centroide normalizado de las tomas válidas. */
+/** Normalized centroid of the valid shots. */
 fun centroid(vs: List<FloatArray>): FloatArray {
   val c = FloatArray(vs.first().size)
   for (v in vs) for (i in c.indices) c[i] += v[i]

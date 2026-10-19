@@ -1,12 +1,12 @@
-"""Protocolo de evaluación (sección 7.5) sobre un conjunto en carpetas.
+"""Evaluation protocol over a dataset laid out in folders.
 
-Estructura esperada:
-    data/<identidad>/<toma>.jpg      (una carpeta por persona; nombres libres)
+Expected layout:
+    data/<identity>/<shot>.jpg      (one folder per person; free file names)
 
-Partición POR IDENTIDAD en validación y prueba. En cada partición, N identidades se enrolan
-(con ``--enroll-shots`` tomas cada una) y el resto actúan como impostores. El umbral se
-deriva sobre validación para el FPIR objetivo y se congela antes de evaluar prueba.
-Se barre N = 10, 25, 50 (acotado por la cantidad de identidades disponibles).
+Split BY IDENTITY into validation and test. In each split, N identities are enrolled
+(with ``--enroll-shots`` shots each) and the rest act as impostors. The threshold is
+derived on validation for the target FPIR and frozen before evaluating on test.
+N = 10, 25, 50 are swept (bounded by the number of available identities).
 """
 from __future__ import annotations
 
@@ -29,10 +29,10 @@ IMG_EXT = {".jpg", ".jpeg", ".png", ".bmp", ".webp"}
 
 
 def box_crop(img: np.ndarray, bbox: np.ndarray) -> np.ndarray:
-    """Línea base de la ablación (``--no-align``): recorte cuadrado de la caja detectada, a 112×112.
+    """Ablation baseline (``--no-align``): square crop of the detected box, at 112×112.
 
-    Es una similitud sin rotación (escala + traslación) con el mismo ``warpAffine`` que ``align``,
-    para que lo único que cambie sea que los cinco puntos dejan de usarse.
+    It is a similarity without rotation (scale + translation) using the same ``warpAffine``
+    as ``align``, so the only change is that the five landmarks are no longer used.
     """
     cx, cy = (bbox[0] + bbox[2]) / 2, (bbox[1] + bbox[3]) / 2
     side = max(bbox[2] - bbox[0], bbox[3] - bbox[1])
@@ -93,18 +93,18 @@ def build_searches(embs: dict[str, list[np.ndarray]], ids: list[str], n_enrolled
 
 
 def main(argv: list[str] | None = None) -> None:
-    ap = argparse.ArgumentParser(description="Evaluación FPIR/FNIR de MNEMO")
+    ap = argparse.ArgumentParser(description="MNEMO FPIR/FNIR evaluation")
     ap.add_argument("data", type=Path)
     ap.add_argument("--target-fpir", type=float, default=0.01)
-    ap.add_argument("--band", type=float, default=0.08, help="ancho de la banda de abstención (τ_alta − τ_baja)")
+    ap.add_argument("--band", type=float, default=0.08, help="width of the abstention band (τ_high − τ_low)")
     ap.add_argument("--enroll-shots", type=int, default=5)
     ap.add_argument("--seed", type=int, default=0)
     ap.add_argument("--out", type=Path, default=Path("eval_report.json"))
     ap.add_argument("--no-align", action="store_true",
-                    help="ablación: recorte cuadrado de la caja detectada en vez de la similitud de 5 puntos")
-    ap.add_argument("--no-enhance", action="store_true", help="ablación: sin gamma/CLAHE/bilateral antes de detectar")
+                    help="ablation: square crop of the detected box instead of the 5-point similarity")
+    ap.add_argument("--no-enhance", action="store_true", help="ablation: skip gamma/CLAHE/bilateral before detecting")
     ap.add_argument("--dump-scores", action="store_true",
-                    help="guarda en el reporte los s_máx de prueba (impostoras, genuinas acertadas y errores de identidad)")
+                    help="store the test s_max values in the report (impostors, correct genuines and identity errors)")
     args = ap.parse_args(argv)
 
     cfg = Config()
@@ -115,9 +115,10 @@ def main(argv: list[str] | None = None) -> None:
     rng.shuffle(ids)
     half = len(ids) // 2
     val_ids, test_ids = ids[:half], ids[half:]
-    print(f"{len(ids)} identidades útiles → validación {len(val_ids)}, prueba {len(test_ids)}")
-    print(f"{stats['sin_rostro']} de {stats['imagenes']} imágenes sin rostro detectado; "
-          f"{stats['personas_descartadas']} personas con menos de 2 usables")
+    # scripts/ablacion.py reads the first three integers of these two lines by position: keep their order.
+    print(f"{len(ids)} usable identities → validation {len(val_ids)}, test {len(test_ids)}")
+    print(f"{stats['sin_rostro']} of {stats['imagenes']} images with no face detected; "
+          f"{stats['personas_descartadas']} people with fewer than 2 usable")
 
     results = {}
     for n in (10, 25, 50):
@@ -126,7 +127,7 @@ def main(argv: list[str] | None = None) -> None:
         if n_val < 1 or n_test < 1:
             continue
         val = build_searches(embs, val_ids, n_val, args.enroll_shots, rng)
-        tau_high = metrics.threshold_at_fpir(val, args.target_fpir)   # congelado aquí
+        tau_high = metrics.threshold_at_fpir(val, args.target_fpir)   # frozen here
         tau_low = tau_high - args.band
         test = build_searches(embs, test_ids, n_test, args.enroll_shots, rng)
         rep = metrics.report(test, tau_low, tau_high)
@@ -146,7 +147,7 @@ def main(argv: list[str] | None = None) -> None:
             f"{k}={v:.4f}" if isinstance(v, float) else f"{k}={v}" for k, v in rep.items() if k not in ("det", "scores")))
 
     args.out.write_text(json.dumps(results, indent=2))
-    print(f"Reporte en {args.out}")
+    print(f"Report written to {args.out}")
 
 
 if __name__ == "__main__":

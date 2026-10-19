@@ -1,12 +1,12 @@
-"""Galería cerrada y cifrada (RF-05, RF-10 a RF-12, RN-01, RN-06, RN-07).
+"""Closed, encrypted gallery.
 
-- Cada identidad se guarda como un único registro cifrado con AES-256-GCM: plantilla de
-  512 floats + metadatos de consentimiento. Nunca se guarda una imagen (RN-02).
-- La clave vive fuera de la base. En el prototipo de escritorio es un archivo 0600; en
-  Android corresponde a una clave no exportable del Android Keystore (ver ``KeyProvider``).
-- Revocar borra la fila; no existe archivo de plantillas revocadas (RN-06). La operación
-  queda en la tabla de auditoría, sin datos biométricos.
-- Búsqueda exhaustiva: con N ≤ 50 cuesta microsegundos (tabla 7).
+- Each identity is stored as a single record encrypted with AES-256-GCM: a 512-float
+  template plus consent metadata. An image is never stored.
+- The key lives outside the database. In the desktop prototype it is a 0600 file; on
+  Android it corresponds to a non-exportable Android Keystore key (see ``KeyProvider``).
+- Revoking deletes the row; there is no file of revoked templates. The operation is
+  recorded in the audit table, without biometric data.
+- Exhaustive search: with N ≤ 50 it costs microseconds.
 """
 from __future__ import annotations
 
@@ -32,7 +32,7 @@ class KeyProvider(Protocol):
 
 
 class FileKeyProvider:
-    """Clave AES de 256 bits en un archivo con permisos 0600. Sustituto de escritorio del almacén seguro."""
+    """256-bit AES key in a file with 0600 permissions. Desktop stand-in for the secure keystore."""
 
     def __init__(self, path: Path):
         self.path = Path(path)
@@ -48,24 +48,24 @@ class FileKeyProvider:
 
 @dataclass
 class Consent:
-    identification: bool = True      # autoriza que el portador reciba nombre y vínculo
-    notes: bool = False              # autoriza notas de conversación
-    encounter_log: bool = False      # autoriza el registro de encuentros (7 días)
+    identification: bool = True      # allows the wearer to be told the name and relation
+    notes: bool = False              # allows conversation notes
+    encounter_log: bool = False      # allows the encounter log (7 days)
 
 
 @dataclass
 class Identity:
     id: str
     name: str
-    relation: str                    # «tu hija», «vecino»…
-    phrase: str                      # «Es Marta, tu hija.» (6-9 palabras, RF-07)
+    relation: str                    # e.g. "tu hija", "vecino"
+    phrase: str                      # e.g. "Es Marta, tu hija." (6-9 words)
     template: np.ndarray             # (512,) normalizado
     consent: Consent
     enrolled_at: float
     expires_at: float
     valid_shots: int
     notes: list[str] = field(default_factory=list)
-    context: str = ""                # dato de contexto opcional («vive en Rosario»)
+    context: str = ""                # optional context fact (e.g. "vive en Rosario")
 
     @property
     def low_quality(self) -> bool:
@@ -106,7 +106,7 @@ class Gallery:
         )
         self._cache: dict[str, Identity] | None = None
 
-    # -- persistencia ---------------------------------------------------------
+    # -- persistence ----------------------------------------------------------
     def _encrypt(self, ident: Identity) -> tuple[bytes, bytes]:
         nonce = os.urandom(12)
         return nonce, self.aead.encrypt(nonce, ident.to_payload(), ident.id.encode())
@@ -138,11 +138,11 @@ class Gallery:
         context: str = "",
         consent_months: int = 12,
     ) -> Identity:
-        """RN-01: sólo se invoca desde el flujo de alta con consentimiento del titular."""
+        """Only invoked from the enrollment flow, with the data subject's consent."""
         if not consent.identification:
-            raise PermissionError("Sin consentimiento de identificación no se crea plantilla (CU-01 A1)")
+            raise PermissionError("No template is created without identification consent")
         if len(self._load()) >= self.max_size:
-            raise GalleryFull(f"La galería admite hasta {self.max_size} identidades")
+            raise GalleryFull(f"The gallery holds at most {self.max_size} identities")
         assert template.shape == (EMBEDDING_DIM,)
         now = time.time()
         ident = Identity(
@@ -163,12 +163,12 @@ class Gallery:
         return ident
 
     def update(self, ident_id: str, **changes) -> Identity:
-        """RF-10: el cuidador edita vínculo, frase y notas; nunca la plantilla."""
+        """The caregiver edits relation, phrase and notes; never the template."""
         ident = self._load()[ident_id]
         for k in ("relation", "phrase", "notes", "context"):
             if k in changes:
                 if k in ("notes", "context") and not ident.consent.notes:
-                    continue  # CU-01 A3: sin consentimiento de notas, la ficha queda sin notas
+                    continue  # without notes consent, the record keeps no notes
                 setattr(ident, k, changes[k])
         with self.db:
             self._save(ident)
@@ -176,15 +176,15 @@ class Gallery:
         return ident
 
     def revoke(self, ident_id: str, by: str = "titular") -> None:
-        """RF-11 / RN-06: borrado inmediato, irreversible y auditable."""
+        """Immediate, irreversible and auditable deletion."""
         with self.db:
             self.db.execute("DELETE FROM identities WHERE id = ?", (ident_id,))
             self._audit("revoke", ident_id, by)
         self._load().pop(ident_id, None)
-        self.db.execute("VACUUM")  # no dejar páginas libres con el blob cifrado
+        self.db.execute("VACUUM")  # leave no free pages holding the encrypted blob
 
     def active(self) -> list[Identity]:
-        """RF-12: las plantillas vencidas quedan desactivadas hasta una nueva aceptación."""
+        """Expired templates stay deactivated until the person consents again."""
         return [i for i in self._load().values() if not i.expired and i.consent.identification]
 
     def all(self) -> list[Identity]:
@@ -197,7 +197,7 @@ class Gallery:
         return ids, np.stack([i.template for i in ids])
 
     def search(self, query: np.ndarray) -> tuple[Identity | None, float, float]:
-        """Etapa 06 · búsqueda 1:N exhaustiva. Devuelve (mejor, s_máx, segunda similitud)."""
+        """Stage 06 · exhaustive 1:N search. Returns (best, s_max, second-best similarity)."""
         ids, mat = self.matrix()
         if not ids:
             return None, -1.0, -1.0

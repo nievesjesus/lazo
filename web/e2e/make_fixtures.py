@@ -1,9 +1,9 @@
-"""Genera cámaras falsas (.y4m) a partir de la foto grupal de core/tests/data para la prueba e2e.
+"""Generates fake cameras (.y4m) from the group photo in core/tests/data for the e2e test.
 
-marta.y4m: rostro que se enrola y luego debe reconocerse.  other.y4m: rostro frontal NO enrolado.
-change.y4m: 8 s de Marta y luego 8 s del desconocido (cambio de persona sin salir de cuadro).
-quien.wav: «¿Quién es?» con la voz del sistema (macOS `say`), entre silencios.
-Uso: ../.venv/bin/python e2e/make_fixtures.py
+marta.y4m: a face that gets enrolled and must then be recognized.  other.y4m: a frontal face that is NOT enrolled.
+change.y4m: 8 s of Marta and then 8 s of the stranger (change of person without leaving the frame).
+quien.wav: «¿Quién es?» spoken with the system voice (macOS `say`), between silences.
+Usage: ../.venv/bin/python e2e/make_fixtures.py
 """
 import subprocess
 import wave
@@ -35,7 +35,7 @@ y4m("marta", [marta] * 20)
 y4m("other", [other] * 20)
 y4m("change", [marta] * 80 + [other] * 80)
 
-# Audio: 2 s de silencio, «¿Quién es?», 3 s de silencio, a 16 kHz mono.
+# Audio: 2 s of silence, «¿Quién es?», 3 s of silence, 16 kHz mono.
 aiff = OUT / "quien.aiff"
 subprocess.run(["say", "-v", "Eddy (Español (México))", "-o", str(aiff), "¿Quién es?"], check=True)
 subprocess.run(["afconvert", "-f", "WAVE", "-d", "LEI16@16000", "-c", "1", str(aiff), str(OUT / "q.wav")], check=True)
@@ -45,4 +45,4 @@ silence = lambda s: np.zeros(int(16000 * s), dtype=np.int16)
 with wave.open(str(OUT / "quien.wav"), "wb") as w:
     w.setnchannels(1); w.setsampwidth(2); w.setframerate(16000)
     w.writeframes(np.concatenate([silence(2), speech, silence(3)]).tobytes())
-print(f"Fixtures en {OUT}")
+print(f"Fixtures written to {OUT}")

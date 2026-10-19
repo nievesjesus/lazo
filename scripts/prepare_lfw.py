@@ -1,10 +1,10 @@
-"""Descarga LFW (Labeled Faces in the Wild) y lo deja como data/lfw/<persona>/*.jpg para mnemo-eval.
+"""Downloads LFW (Labeled Faces in the Wild) and leaves it as data/lfw/<person>/*.jpg for mnemo-eval.
 
-Conjunto público de referencia de la sección 7.5 (calibración y comparación). NO reemplaza al conjunto
-propio consentido: sirve para verificar que la implementación reproduce el comportamiento esperado.
+Public reference dataset from section 7.5 of the report (calibration and comparison). It does NOT replace the
+project's own consented dataset: it is used to check that the implementation reproduces the expected behaviour.
 
-Se conservan las personas con al menos --min-images fotos (5 para enrolar + sondas) y, para acotar
-el tiempo de cómputo, hasta --max-images por persona.
+People with at least --min-images photos are kept (5 to enroll + probes) and, to bound the compute
+time, up to --max-images per person.
 
     .venv/bin/python scripts/prepare_lfw.py
 """
@@ -14,7 +14,7 @@ import tarfile
 import urllib.request
 from pathlib import Path
 
-URL = "https://ndownloader.figshare.com/files/5976018"  # lfw.tgz (espejo que usa scikit-learn)
+URL = "https://ndownloader.figshare.com/files/5976018"  # lfw.tgz (the mirror scikit-learn uses)
 
 ap = argparse.ArgumentParser()
 ap.add_argument("--out", type=Path, default=Path("data/lfw"))
@@ -26,7 +26,7 @@ cache = Path("data/.cache")
 cache.mkdir(parents=True, exist_ok=True)
 tgz = cache / "lfw.tgz"
 if not tgz.exists():
-    print("Descargando LFW (~180 MB)…")
+    print("Downloading LFW (~180 MB)…")
     urllib.request.urlretrieve(URL, tgz)
 raw = cache / "lfw"
 if not raw.exists():
@@ -44,4 +44,4 @@ for person in sorted(p for p in raw.iterdir() if p.is_dir()):
     for f in imgs[: args.max_images]:
         shutil.copy2(f, dst / f.name)
     kept += 1
-print(f"{kept} identidades en {args.out}")
+print(f"{kept} identities in {args.out}")

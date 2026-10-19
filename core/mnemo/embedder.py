@@ -1,7 +1,7 @@
-"""Etapa 05 · Embedding con MobileFaceNet entrenada con ArcFace (w600k_mbf, WebFace600K).
+"""Stage 05 · Embedding with a MobileFaceNet trained with ArcFace (w600k_mbf, WebFace600K).
 
-Salida: vector de 512 dimensiones normalizado sobre la hiperesfera, de modo que la
-similitud coseno de la ec. (5) se reduce a un producto interno.
+Output: a 512-dimensional vector normalized onto the hypersphere, so that cosine
+similarity reduces to an inner product.
 """
 from __future__ import annotations
 
@@ -24,7 +24,7 @@ class FaceEmbedder:
         self.input_name = self.session.get_inputs()[0].name
 
     def embed(self, crops_bgr: list[np.ndarray] | np.ndarray) -> np.ndarray:
-        """Recibe uno o varios recortes alineados de 112×112 y devuelve (N, 512) normalizados."""
+        """Takes one or several aligned 112×112 crops and returns (N, 512) normalized vectors."""
         if isinstance(crops_bgr, np.ndarray) and crops_bgr.ndim == 3:
             crops_bgr = [crops_bgr]
         blob = cv2.dnn.blobFromImages(list(crops_bgr), 1.0 / 127.5, (112, 112), (127.5, 127.5, 127.5), swapRB=True)
@@ -32,10 +32,10 @@ class FaceEmbedder:
 
 
 def cosine(q: np.ndarray, t: np.ndarray) -> np.ndarray:
-    """s(q, t) = qᵀt / (‖q‖‖t‖) ∈ [−1, 1]  (ec. 5)."""
+    """s(q, t) = qᵀt / (‖q‖‖t‖) ∈ [−1, 1]."""
     return l2_normalize(t) @ l2_normalize(q)
 
 
 def template_from_shots(embeddings: np.ndarray) -> np.ndarray:
-    """RF-04: la plantilla es el centroide normalizado de las tomas válidas."""
+    """The template is the normalized centroid of the valid shots."""
     return l2_normalize(l2_normalize(embeddings).mean(axis=0))

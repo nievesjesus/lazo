@@ -12,9 +12,9 @@ export const ddmmyyyy = (ts: number) => new Date(ts).toLocaleDateString('es-AR')
 export const num = (x: number, d = 2) => x.toLocaleString('es-AR', { minimumFractionDigits: d, maximumFractionDigits: d });
 export const isToday = (ts: number) => new Date(ts).toDateString() === new Date().toDateString();
 
-/** TTS del sistema operativo. Se prefieren voces locales: las voces «en línea» del navegador enviarían el texto a un servidor. */
+/** The operating system's TTS. Local voices are preferred: the browser's «online» voices would send the text to a server. */
 export function speak(text: string, enabled = true) {
-  // El evento permite que otro destino (p. ej. un puente nativo hacia el altavoz de las gafas) reciba la frase.
+  // The event lets another destination (e.g. a native bridge to the glasses' speaker) receive the phrase.
   window.dispatchEvent(new CustomEvent('mnemo:speak', { detail: text }));
   if (!enabled || !('speechSynthesis' in window)) return;
   const voices = speechSynthesis.getVoices().filter((v) => v.lang.startsWith('es') && v.localService);
@@ -22,12 +22,12 @@ export function speak(text: string, enabled = true) {
   u.lang = 'es-AR';
   u.rate = 0.95;
   u.voice = voices.find((v) => v.lang === 'es-AR') ?? voices.find((v) => v.lang === 'es-419') ?? voices[0] ?? null;
-  if (!u.voice) return; // sin voz local: no se habla antes que filtrar el texto a la nube
+  if (!u.voice) return; // no local voice: stay silent rather than leak the text to the cloud
   speechSynthesis.cancel();
   speechSynthesis.speak(u);
 }
 
-/** Cuenta peticiones a orígenes distintos del propio (P-06: «0 conexiones salientes»). */
+/** Counts requests to origins other than our own (the «0 outgoing connections» indicator). */
 export function watchEgress(onChange: (n: number, hosts: string[]) => void) {
   const hosts = new Set<string>();
   const check = (entries: PerformanceEntryList) => {

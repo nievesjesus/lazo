@@ -1,5 +1,5 @@
-// Pipeline de ocho etapas (figura 7) en el navegador. El cuadro vive sólo dentro de `process`:
-// el canvas de trabajo se sobrescribe en cada ciclo y nada se persiste (RN-02).
+// Eight-stage pipeline in the browser. The frame lives only inside `process`:
+// the working canvas is overwritten on every cycle and nothing is persisted.
 import * as gallery from '../store/gallery';
 import { ABSTAIN_PHRASE, DEFAULT_DECISION, type DecisionConfig, QUALITY, UNKNOWN_PHRASE } from './config';
 import { type Announcement, classify, DecisionEngine, type State, type Zone } from './decision';
@@ -43,11 +43,11 @@ export class Pipeline {
     return new Pipeline(det, emb, { ...cfg });
   }
 
-  /** Etapas 02–05 sobre un cuadro: preprocesa, detecta, alinea, mide calidad y (si pasa) calcula el embedding. */
+  /** Stages 02–05 on a frame: preprocess, detect, align, measure quality and (if it passes) compute the embedding. */
   async analyze(frame: HTMLCanvasElement, opts: { allowProfile?: boolean } = {}) {
     const t = performance.now();
     const timings: Record<string, number> = {};
-    // Etapa 02: corrección de intensidad sobre una copia de trabajo.
+    // Stage 02: intensity correction on a working copy.
     this.work.width = frame.width;
     this.work.height = frame.height;
     const wctx = this.work.getContext('2d', { willReadFrequently: true })!;

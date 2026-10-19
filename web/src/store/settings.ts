@@ -2,7 +2,7 @@ import { DEFAULT_DECISION } from '../pipeline/config';
 import * as idb from './db';
 
 export interface Calibration {
-  /** Curva DET exportada por `mnemo-eval` (core/): τ → FPIR, FNIR. */
+  /** DET curve exported by `mnemo-eval` (core/): τ → FPIR, FNIR. */
   tau: number[];
   fpir: number[];
   fnir: number[];
@@ -11,15 +11,15 @@ export interface Calibration {
 
 export interface Settings {
   privacyMode: boolean;
-  onDemand: boolean;       // «sólo a pedido»: identificación disparada por «¿quién es?»
+  onDemand: boolean;       // «on request only»: identification triggered by «¿quién es?»
   tauHigh: number;
   dwellMs: number;
   facing: 'user' | 'environment';
   voice: boolean;
-  announceOnChange: boolean; // al cambiar de persona, avisar sin que pregunten
-  announceUnknown: boolean;  // decir «no es nadie conocido» sin que pregunten
-  listen: boolean;           // micrófono abierto para «¿quién es?» (Whisper local)
-  details: boolean;          // mostrar datos técnicos (similitud, τ, fps) — útil para presentar
+  announceOnChange: boolean; // on a change of person, announce without being asked
+  announceUnknown: boolean;  // say «no es nadie conocido» without being asked
+  listen: boolean;           // microphone open for «¿quién es?» (local Whisper)
+  details: boolean;          // show technical details (similarity, τ, fps) — useful for demos
   calibration: Calibration | null;
 }
 
@@ -45,7 +45,7 @@ export async function saveSettings(s: Settings) {
   await idb.put('settings', 'app', s);
 }
 
-/** Interpola FPIR/FNIR estimados para un τ a partir de la curva de calibración. */
+/** Interpolates the estimated FPIR/FNIR for a given τ from the calibration curve. */
 export function estimate(c: Calibration, tau: number): { fpir: number; fnir: number } {
   const i = c.tau.findIndex((t) => t >= tau);
   if (i <= 0) return { fpir: c.fpir[0], fnir: c.fnir[0] };

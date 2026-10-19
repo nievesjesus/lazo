@@ -1,5 +1,5 @@
-// Etapas 02 y 04 en el navegador: métricas de calidad, corrección de intensidad y
-// alineación por transformación de similitud (ec. 1 y 3).
+// Stages 02 and 04 in the browser: quality metrics, intensity correction and
+// alignment via a similarity transform.
 
 export type Point = [number, number];
 
@@ -11,7 +11,7 @@ export const ARCFACE_TEMPLATE: Point[] = [
   [70.7299, 92.2041],
 ];
 
-/** Umeyama 2D: matriz [a, b, tx; c, d, ty] con a=d=s·cosθ, c=−b=s·senθ. Forma cerrada. */
+/** 2D Umeyama: matrix [a, b, tx; c, d, ty] with a=d=s·cosθ, c=−b=s·sinθ. Closed form. */
 export function similarityTransform(src: Point[], dst: Point[] = ARCFACE_TEMPLATE): number[] {
   const n = src.length;
   let msx = 0, msy = 0, mdx = 0, mdy = 0;
@@ -35,7 +35,7 @@ export function similarityTransform(src: Point[], dst: Point[] = ARCFACE_TEMPLAT
   return [a, -c, tx, c, a, ty];
 }
 
-/** Recorte canónico de 112×112: warp afín con interpolación bilineal del canvas. */
+/** Canonical 112×112 crop: affine warp with the canvas's bilinear interpolation. */
 export function alignCrop(source: CanvasImageSource, kps: Point[], out: HTMLCanvasElement): number[] {
   const m = similarityTransform(kps);
   out.width = out.height = 112;
@@ -57,7 +57,7 @@ export function toGray(data: Uint8ClampedArray): Float32Array {
   return g;
 }
 
-/** V = Var(∇²I) con la máscara [[0,1,0],[1,−4,1],[0,1,0]] (ec. 1). */
+/** V = Var(∇²I) with the mask [[0,1,0],[1,−4,1],[0,1,0]] (variance of the Laplacian). */
 export function sharpness(gray: Float32Array, w: number, h: number): number {
   let sum = 0, sum2 = 0, n = 0;
   for (let y = 1; y < h - 1; y++) {
@@ -77,7 +77,7 @@ export function meanOf(a: Float32Array): number {
   return s / a.length;
 }
 
-/** Corrección de intensidad por potencia (s = r^γ) hacia una media objetivo. Aplica in situ. */
+/** Power-law intensity correction (s = r^γ) toward a target mean. Applied in place. */
 export function gammaCorrect(img: ImageData, target = 120): void {
   const g = toGray(img.data);
   const mean = Math.max(meanOf(g), 1) / 255;
@@ -91,7 +91,7 @@ export function gammaCorrect(img: ImageData, target = 120): void {
   }
 }
 
-/** Giro fuera del plano: desplazamiento horizontal de la nariz respecto del centro de los ojos / distancia interocular. */
+/** Out-of-plane turn: horizontal offset of the nose from the eye midpoint / interocular distance. */
 export function yawRatio(kps: Point[]): number {
   const mx = (kps[0][0] + kps[1][0]) / 2;
   const iod = Math.hypot(kps[1][0] - kps[0][0], kps[1][1] - kps[0][1]) + 1e-6;

@@ -1,5 +1,5 @@
-// Historial de encuentros (RF-14) y contador anónimo de descartes (RN-04).
-// Sólo hora, identidad y similitud. Nunca imágenes, audio ni ubicación. Retención de 7 días.
+// Encounter history and anonymous counter of discarded detections.
+// Only time, identity and similarity. Never images, audio or location. 7-day retention.
 import { HISTORY_DAYS } from '../pipeline/config';
 import * as idb from './db';
 

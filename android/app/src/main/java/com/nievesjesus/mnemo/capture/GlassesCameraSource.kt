@@ -21,16 +21,16 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 
 /**
- * Cuadros desde las Ray-Ban Meta mediante el Meta Wearables Device Access Toolkit (1.0).
+ * Frames from the Ray-Ban Meta glasses through the Meta Wearables Device Access Toolkit (1.0).
  *
- * Precondiciones (las resuelve [com.nievesjesus.mnemo.MainActivity]):
- *  1. `Wearables.initialize(context)` tras conceder BLUETOOTH_CONNECT / INTERNET.
- *  2. Registro con la app Meta AI (`Wearables.startRegistration`) y Developer Mode activo.
- *  3. Permiso de cámara de las gafas (`Wearables.RequestPermissionContract`, Permission.CAMERA).
+ * Preconditions (handled by [com.nievesjesus.mnemo.MainActivity]):
+ *  1. `Wearables.initialize(context)` after BLUETOOTH_CONNECT / INTERNET are granted.
+ *  2. Registration with the Meta AI app (`Wearables.startRegistration`) and Developer Mode on.
+ *  3. Glasses camera permission (`Wearables.RequestPermissionContract`, Permission.CAMERA).
  *
- * El stream se pide sin compresión: el SDK entrega YUV decodificado (I420 en el sample oficial;
- * se valida el tamaño del buffer por si cambia). 504×896 a 15 fps alcanza para rostros > 80 px
- * a distancia de conversación y deja margen de batería (RNF energía ≤ 12 %/h).
+ * The stream is requested uncompressed: the SDK delivers decoded YUV (I420 in the official sample;
+ * the buffer size is validated in case that changes). 504×896 at 15 fps is enough for faces > 80 px
+ * at conversation distance and leaves battery headroom (energy budget ≤ 12 %/h).
  */
 class GlassesCameraSource(
     private val quality: VideoQuality = VideoQuality.MEDIUM,
@@ -45,13 +45,13 @@ class GlassesCameraSource(
   override fun frames(): Flow<Frame> =
       callbackFlow {
             val created = Wearables.createSession(AutoDeviceSelector())
-            created.onFailure { error, _ -> close(IllegalStateException("Sesión DAT: ${error.description}")) }
+            created.onFailure { error, _ -> close(IllegalStateException("DAT session: ${error.description}")) }
             created.onSuccess { s ->
               session = s
-              launch { s.errors.collect { Log.w(TAG, "Error de sesión: ${it.description}") } }
+              launch { s.errors.collect { Log.w(TAG, "Session error: ${it.description}") } }
               s.start()
               launch {
-                // La cámara sólo puede agregarse con la sesión en STARTED (si no: SESSION_IDLE).
+                // The camera can only be added once the session is STARTED (otherwise: SESSION_IDLE).
                 s.state.first { it == DeviceSessionState.STARTED }
                 s.addCamera(StreamConfiguration(videoQuality = quality, frameRate = frameRate, compressVideo = false))
                     .onSuccess { cam ->
@@ -64,7 +64,7 @@ class GlassesCameraSource(
                       }
                       cam.stream.start().onFailure { e, _ -> close(IllegalStateException("Stream: ${e.description}")) }
                     }
-                    .onFailure { e, _ -> close(IllegalStateException("Cámara de las gafas: ${e.description}")) }
+                    .onFailure { e, _ -> close(IllegalStateException("Glasses camera: ${e.description}")) }
               }
             }
             awaitClose { stopNow() }
@@ -74,7 +74,7 @@ class GlassesCameraSource(
   override suspend fun stop() = stopNow()
 
   private fun stopNow() {
-    camera?.close() // detiene también el stream hijo
+    camera?.close() // also stops the child stream
     camera = null
     session?.stop()
     session = null
@@ -83,7 +83,7 @@ class GlassesCameraSource(
   companion object {
     private const val TAG = "GlassesCameraSource"
 
-    /** Conversión I420 (Y, U, V planos completos) → ARGB. BT.601 rango limitado. */
+    /** I420 (full Y, U, V planes) → ARGB conversion. BT.601 limited range. */
     fun i420ToBitmap(vf: VideoFrame): Bitmap? {
       if (vf.isCompressed) return null
       val w = vf.width
@@ -92,7 +92,7 @@ class GlassesCameraSource(
       val cSize = (w / 2) * (h / 2)
       val buf = vf.buffer.duplicate().apply { rewind() }
       if (buf.remaining() < ySize + 2 * cSize) {
-        Log.w(TAG, "Buffer inesperado (${buf.remaining()} B para ${w}x$h): ¿formato distinto de I420?")
+        Log.w(TAG, "Unexpected buffer (${buf.remaining()} B for ${w}x$h): format other than I420?")
         return null
       }
       val data = ByteArray(ySize + 2 * cSize).also { buf.get(it) }

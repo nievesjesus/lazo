@@ -1,7 +1,7 @@
-// Transcripción en el dispositivo con Whisper base (ONNX cuantizado) vía transformers.js.
-// El modelo y el runtime se sirven desde el propio origen: el audio nunca sale del navegador (RN-05).
+// On-device transcription with Whisper base (quantized ONNX) via transformers.js.
+// The model and runtime are served from our own origin: the audio never leaves the browser.
 import { env, pipeline } from '@huggingface/transformers';
-// Runtime WASM de la versión de onnxruntime-web que trae transformers.js (sin esto lo baja de un CDN).
+// WASM runtime of the onnxruntime-web version that ships with transformers.js (without this it downloads it from a CDN).
 import ortMjs from '../../node_modules/@huggingface/transformers/node_modules/onnxruntime-web/dist/ort-wasm-simd-threaded.asyncify.mjs?url';
 import ortWasm from '../../node_modules/@huggingface/transformers/node_modules/onnxruntime-web/dist/ort-wasm-simd-threaded.asyncify.wasm?url';
 
@@ -9,9 +9,9 @@ env.allowRemoteModels = false;
 env.allowLocalModels = true;
 env.localModelPath = `${import.meta.env.BASE_URL}models/`;
 env.backends.onnx.wasm!.wasmPaths = { mjs: ortMjs, wasm: ortWasm };
-// Los archivos ya se sirven desde el propio origen: la caché de transformers.js no aporta y, si alguna
-// vez guardó una respuesta equivocada (p. ej. el index.html cuando el modelo aún no estaba copiado),
-// la seguiría reutilizando. Se desactiva y se borra la que haya quedado.
+// The files are already served from our own origin: the transformers.js cache adds nothing and, if it
+// ever stored a wrong response (e.g. index.html when the model had not been copied yet), it would keep
+// reusing it. It is disabled and any leftover cache is deleted.
 env.useBrowserCache = false;
 const staleCache = self.caches?.delete('transformers-cache').catch(() => false);
 
@@ -20,7 +20,7 @@ let asr: Promise<Asr> | null = null;
 
 const load = async () => {
   await staleCache;
-  // Progreso agregado de la descarga del modelo (~77 MB), para mostrarlo en la interfaz.
+  // Aggregated model download progress (~77 MB), to show in the UI.
   const files = new Map<string, { loaded: number; total: number }>();
   const progress_callback = (p: { status: string; file?: string; loaded?: number; total?: number }) => {
     if (p.status !== 'progress' || !p.file || !p.total) return;
@@ -31,7 +31,7 @@ const load = async () => {
   };
   asr ??= (pipeline('automatic-speech-recognition', 'whisper-base', { dtype: 'q8', device: 'wasm', progress_callback }) as unknown as Promise<Asr>)
     .catch((err) => {
-      asr = null; // no quedar atado a un fallo (p. ej. modelo aún no copiado): el próximo intento recarga
+      asr = null; // don't stay tied to a failure (e.g. model not copied yet): the next attempt reloads
       throw err;
     });
   return asr;

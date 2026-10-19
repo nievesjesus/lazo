@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# E2E aislado: levanta Vite en un puerto propio, genera los fixtures, corre la suite y apaga el server.
+# Isolated E2E: starts Vite on its own port, generates the fixtures, runs the suite and shuts the server down.
 set -euo pipefail
 cd "$(dirname "$0")/../web"
 PORT="${E2E_PORT:-5199}"

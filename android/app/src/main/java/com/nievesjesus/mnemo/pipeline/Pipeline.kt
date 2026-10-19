@@ -27,7 +27,7 @@ data class FrameResult(
     val totalMs: Long,
 )
 
-/** Pipeline de ocho etapas (figura 7). El Bitmap de entrada no se retiene (RN-02). */
+/** Eight-stage pipeline. The input Bitmap is not retained. */
 class Pipeline(ctx: Context, private val gallery: SecureGallery, cfg: DecisionConfig = DecisionConfig()) : AutoCloseable {
   private val detector = FaceDetector(ctx)
   private val embedder = FaceEmbedder(ctx)

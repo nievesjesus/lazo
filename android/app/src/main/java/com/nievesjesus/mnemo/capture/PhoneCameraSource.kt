@@ -20,8 +20,8 @@ import kotlinx.coroutines.flow.callbackFlow
 import kotlinx.coroutines.channels.BufferOverflow
 
 /**
- * Cámara del teléfono con CameraX. La trasera, con el teléfono montado a la altura de los ojos,
- * es el sustituto de las gafas con el que se obtienen las métricas de la sección 7.6.
+ * Phone camera via CameraX. The rear one, with the phone mounted at eye level, stands in for the
+ * glasses when gathering the test-bench metrics.
  */
 class PhoneCameraSource(
     private val context: Context,

@@ -10,9 +10,10 @@ import android.speech.RecognizerIntent
 import android.speech.SpeechRecognizer
 
 /**
- * Escucha «¿quién es?» (CU-04) con el reconocedor ON-DEVICE de Android (API 31+): el audio no sale
- * del teléfono (RN-05). Si el dispositivo no lo tiene, no se cae al reconocedor en la nube: se avisa
- * y queda el botón. Alternativa con el micrófono de las gafas: `mwdat-speech` (experimental en el DAT 1.0).
+ * Listens for «¿quién es?» with Android's ON-DEVICE recognizer (API 31+): the audio never leaves
+ * the phone. If the device lacks it, it does not fall back to the cloud recognizer: it reports the
+ * problem and the button remains. Alternative using the glasses' microphone: `mwdat-speech`
+ * (experimental in DAT 1.0).
  */
 class VoiceListener(
     private val ctx: Context,
@@ -48,7 +49,7 @@ class VoiceListener(
 
   private fun listen() {
     if (!active) return
-    if (muted()) { main.postDelayed(::listen, 300); return } // no escucharse a sí mismo mientras habla el TTS
+    if (muted()) { main.postDelayed(::listen, 300); return } // don't listen to ourselves while the TTS is speaking
     recognizer?.startListening(Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
       putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
       putExtra(RecognizerIntent.EXTRA_LANGUAGE, "es-AR")
@@ -66,11 +67,11 @@ class VoiceListener(
     val texts = results.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
     texts?.firstOrNull()?.let { onStatus("«$it»") }
     handle(texts)
-    main.postDelayed(::listen, 150) // escucha continua
+    main.postDelayed(::listen, 150) // continuous listening
   }
 
   override fun onError(error: Int) {
-    // Silencio / nada reconocido son normales en escucha continua: se reinicia.
+    // Silence / nothing recognized are normal during continuous listening: restart.
     main.postDelayed(::listen, if (error == SpeechRecognizer.ERROR_RECOGNIZER_BUSY) 800 else 250)
   }
 
@@ -86,7 +87,7 @@ class VoiceListener(
     private val ASK = Regex("(?<!\\p{L})(qui[eé]n\\s+(es|est[aá]|era|ser[aá]|me\\s+habla|viene)|c[oó]mo\\s+se\\s+llama)(?!\\p{L})", RegexOption.IGNORE_CASE)
     private val ASK_SHORT = Regex("^[\\s¿¡]*(qu[eé]|qui[eé]n)(\\s+es)?[\\s?!.]*$", RegexOption.IGNORE_CASE)
 
-    /** Mismas frases que web/src/voice/listener.ts y core/mnemo/voice.py. */
+    /** Same phrases as web/src/voice/listener.ts and core/mnemo/voice.py. */
     fun isAsk(text: String) = ASK.containsMatchIn(text) || ASK_SHORT.matches(text)
   }
 }

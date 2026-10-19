@@ -10,10 +10,10 @@ from .base import CaptureSource, Frame
 
 
 class WebcamSource(CaptureSource):
-    """Webcam local, o la cámara de un teléfono expuesta como cámara de continuidad / IP-cam.
+    """Local webcam, or a phone camera exposed as a continuity camera / IP cam.
 
-    ``device`` acepta un índice (0, 1…) o una URL (p. ej. ``http://192.168.0.10:8080/video``
-    de una app tipo IP Webcam montada a la altura de los ojos, como propone la sección 7.3).
+    ``device`` accepts an index (0, 1…) or a URL (e.g. ``http://192.168.0.10:8080/video``
+    from an IP Webcam-style app mounted at eye level).
     """
 
     name = "webcam"
@@ -27,7 +27,7 @@ class WebcamSource(CaptureSource):
         self.cap.set(cv2.CAP_PROP_FRAME_WIDTH, self.width)
         self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, self.height)
         if not self.cap.isOpened():
-            raise RuntimeError(f"No se pudo abrir la cámara {self.device!r}")
+            raise RuntimeError(f"Could not open camera {self.device!r}")
 
     def read(self) -> Frame | None:
         assert self.cap is not None
@@ -40,7 +40,7 @@ class WebcamSource(CaptureSource):
 
 
 class VideoFileSource(WebcamSource):
-    """Igual que la webcam pero con marcas de tiempo del propio video (reproducible)."""
+    """Same as the webcam but with the video's own timestamps (reproducible)."""
 
     name = "video"
 
@@ -51,10 +51,10 @@ class VideoFileSource(WebcamSource):
 
 
 class GlassesBridgeSource(CaptureSource):
-    """Recibe cuadros JPEG de la app Android (``android/``, modo «puente») por TCP local.
+    """Receives JPEG frames from the Android app (``android/``, "bridge" mode) over local TCP.
 
-    Protocolo mínimo: por cada cuadro, 8 bytes little-endian (uint32 largo, uint32 t_ms) + JPEG.
-    Pensado para ``adb forward tcp:5555 tcp:5555``; nunca sale de la red local del banco.
+    Minimal protocol: for each frame, 8 bytes little-endian (uint32 length, uint32 t_ms) + JPEG.
+    Meant for ``adb forward tcp:5555 tcp:5555``; it never leaves the test bench's local network.
     """
 
     name = "rayban-meta"

@@ -825,7 +825,7 @@
   -0.0206,
   0.0164
  ],
- "_nota": "Detecciones reales con core (RetinaFace-500MF + MobileFaceNet) sobre las imágenes 1200x896. sim_marta: coseno contra la plantilla de Marta (centroide de sus 5 tomas). sim_tomas: contra la toma de Tomás.",
+ "_nota": "Detecciones reales con core (SCRFD-500MF + MobileFaceNet) sobre las imágenes 1200x896. sim_marta: coseno contra la plantilla de Marta (centroide de sus 5 tomas). sim_tomas: contra la toma de Tomás.",
  "marta_gorro_barbijo": {
   "size": [
    1200,

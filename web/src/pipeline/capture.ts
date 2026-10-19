@@ -1,16 +1,16 @@
-// Interfaz de captura abstracta (sección 7.3). El pipeline sólo ve `CaptureSource`.
+// Abstract capture interface. The pipeline only sees `CaptureSource`.
 //
-// - WebcamSource: webcam del equipo o cámara del teléfono (frontal o trasera) vía getUserMedia.
-//   La trasera, con el teléfono a la altura de los ojos, es el sustituto de las gafas del banco de pruebas.
-// - Las Ray-Ban Meta NO son accesibles desde el navegador: el Meta Wearables Device Access Toolkit
-//   es nativo (Android/iOS). Ver android/ — ahí `GlassesCameraSource` implementa esta misma interfaz.
+// - WebcamSource: computer webcam or phone camera (front or rear) via getUserMedia.
+//   The rear camera, with the phone held at eye level, stands in for the glasses on the test bench.
+// - The Ray-Ban Meta glasses are NOT reachable from the browser: the Meta Wearables Device Access
+//   Toolkit is native (Android/iOS). See android/ — there `GlassesCameraSource` implements this same interface.
 
 export interface CaptureSource {
   readonly name: string;
   readonly element: HTMLVideoElement;
   start(): Promise<void>;
   stop(): void;
-  /** Dibuja el cuadro actual en el canvas y devuelve sus dimensiones, o null si no hay cuadro. */
+  /** Draws the current frame onto the canvas and returns its dimensions, or null if there is no frame. */
   grab(target: HTMLCanvasElement): { width: number; height: number } | null;
 }
 

@@ -1,10 +1,10 @@
-"""Escucha «¿quién es?» con el micrófono (CU-04), transcribiendo en el dispositivo con faster-whisper.
+"""Listens for «¿quién es?» through the microphone, transcribing on-device with faster-whisper.
 
-Un detector de actividad de voz por energía recorta cada frase; sólo esos fragmentos se
-transcriben. El audio vive en memoria y se descarta (RN-02). El modelo se descarga una única vez
-(`WhisperModel("base")` lo cachea en ~/.cache/huggingface) y a partir de ahí no hay tráfico de red.
+An energy-based voice activity detector cuts each utterance; only those fragments are
+transcribed. Audio lives in memory and is discarded. The model is downloaded once
+(`WhisperModel("base")` caches it in ~/.cache/huggingface) and after that there is no network traffic.
 
-Dependencias opcionales:  uv pip install -e "core[voice]"
+Optional dependencies:  uv pip install -e "core[voice]"
 """
 from __future__ import annotations
 
@@ -24,7 +24,7 @@ MAX_SEGMENT_MS = 4000
 MIN_SPEECH_MS = 300
 
 _ASK = re.compile(r"(?<!\w)(qui[eé]n\s+(es|est[aá]|era|ser[aá]|me\s+habla|viene)|c[oó]mo\s+se\s+llama)(?!\w)", re.I)
-# Whisper suele entender «¿Qué es?» cuando se dice «¿Quién es?»: sólo se acepta como frase completa.
+# Whisper often hears «¿Qué es?» when «¿Quién es?» is said: accepted only as a complete phrase.
 _ASK_SHORT = re.compile(r"^[\s¿¡]*(qu[eé]|qui[eé]n)(\s+es)?[\s?!.]*$", re.I)
 
 
@@ -41,13 +41,13 @@ class Transcriber:
 
     def __call__(self, audio16k: np.ndarray) -> str:
         segments, _ = self.model.transcribe(audio16k.astype(np.float32), language="es", beam_size=1, vad_filter=False,
-            initial_prompt="¿Quién es? ¿Cómo se llama?",  # sesga hacia la pregunta esperada
+            initial_prompt="¿Quién es? ¿Cómo se llama?",  # biases toward the expected question
         )
         return " ".join(s.text for s in segments).strip()
 
 
 class VoiceListener:
-    """Abre el micrófono en un hilo y llama ``on_ask(texto)`` cuando oye la pregunta."""
+    """Opens the microphone in a thread and calls ``on_ask(text)`` when it hears the question."""
 
     def __init__(self, on_ask: Callable[[str], None], muted: Callable[[], bool] = lambda: False,
                  transcriber: Transcriber | None = None, on_text: Callable[[str], None] | None = None):
@@ -84,7 +84,7 @@ class VoiceListener:
 
 
 class _Vad:
-    """VAD por energía con piso de ruido adaptativo (misma lógica que web/src/voice/listener.ts)."""
+    """Energy-based VAD with an adaptive noise floor (same logic as web/src/voice/listener.ts)."""
 
     def __init__(self, emit: Callable[[np.ndarray], None]):
         self.emit = emit

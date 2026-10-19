@@ -6,7 +6,7 @@ plugins {
   alias(libs.plugins.jetbrains.kotlin.android)
 }
 
-// Credenciales del Wearables Developer Center. En Developer Mode pueden ser "0".
+// Credentials from the Wearables Developer Center. In Developer Mode they can be "0".
 val localProperties = Properties().apply {
   rootDir.resolve("local.properties").takeIf { it.exists() }?.inputStream()?.use { load(it) }
 }
@@ -34,14 +34,14 @@ android {
     sourceCompatibility = JavaVersion.VERSION_17
     targetCompatibility = JavaVersion.VERSION_17
   }
-  // Los modelos ONNX no se comprimen dentro del APK para poder mapearlos.
+  // ONNX models are not compressed inside the APK so they can be memory-mapped.
   androidResources { noCompress += "onnx" }
   sourceSets["main"].assets.srcDir(layout.buildDirectory.dir("generated/mnemoModels"))
 }
 
 kotlin { compilerOptions { jvmTarget = JvmTarget.JVM_17 } }
 
-// Copia ../../models/*.onnx (descargados con scripts/download_models.sh) a los assets del APK.
+// Copies ../../models/*.onnx (downloaded with scripts/download_models.sh) into the APK assets.
 val copyModels by tasks.registering(Copy::class) {
   from(rootDir.resolve("../models")) { include("*.onnx") }
   into(layout.buildDirectory.dir("generated/mnemoModels/models"))
@@ -58,6 +58,6 @@ dependencies {
   implementation(libs.camerax.lifecycle)
   implementation(libs.mwdat.core)
   implementation(libs.mwdat.camera)
-  implementation(libs.mwdat.mockdevice) // gafas simuladas para probar sin hardware
+  implementation(libs.mwdat.mockdevice) // simulated glasses, to test without hardware
   testImplementation(libs.junit)
 }

@@ -1,11 +1,11 @@
-// Etapa 07 · Decisión con rechazo y máquina de estados (sección 7.4 y tabla 6).
-// Port 1:1 de core/mnemo/decision.py.
+// Stage 07 · Decision with rejection and state machine.
+// 1:1 port of core/mnemo/decision.py.
 //
-// Encuentro = mientras la misma persona siga frente a la cámara. Un encuentro produce a lo sumo una
-// frase (RN-08). Termina cuando no hay rostro durante `encounterGapMs` o cuando cambia la persona:
-// el embedding del cuadro actual deja de parecerse al del rostro ya anunciado (el «ancla") durante
-// `changeFrames` cuadros seguidos. El cambio se detecta por continuidad del rostro, no por identidad,
-// así que también funciona entre dos desconocidos.
+// Encounter = for as long as the same person stays in front of the camera. An encounter produces at
+// most one phrase. It ends when there is no face for `encounterGapMs` or when the person changes:
+// the embedding of the current frame stops resembling that of the face already announced (the "anchor")
+// for `changeFrames` consecutive frames. A change is detected by face continuity, not by identity,
+// so it also works between two strangers.
 import type { DecisionConfig } from './config';
 
 export type State = 'en_reposo' | 'observando' | 'afirmando' | 'absteniendose' | 'descartando';
@@ -25,12 +25,12 @@ export interface Observation {
   identityId?: string | null;
   sMax?: number;
   weakTemplate?: boolean;
-  /** Embedding normalizado del rostro del cuadro: sólo se usa en memoria para detectar el cambio de persona. */
+  /** Normalized embedding of the frame's face: only used in memory, to detect a change of person. */
   embedding?: Float32Array | null;
 }
 
 export interface Announcement {
-  /** match ⇒ nombrar · abstain ⇒ «no estoy seguro» · unknown ⇒ nadie del círculo */
+  /** match ⇒ name the person · abstain ⇒ «not sure» · unknown ⇒ nobody from the circle */
   kind: 'match' | 'abstain' | 'unknown';
   reason: Reason;
   identityId: string | null;
@@ -57,7 +57,7 @@ export class DecisionEngine {
   private changeCount = 0;
   private skipDwell = false;
   private reason: Reason = 'encuentro';
-  private silent = false; // encuentro nuevo por cambio con el aviso automático desactivado
+  private silent = false; // new encounter caused by a change, with automatic announcements turned off
 
   constructor(public cfg: DecisionConfig) {}
 
@@ -74,7 +74,7 @@ export class DecisionEngine {
     this.silent = false;
   }
 
-  /** «¿Quién es?»: nuevo encuentro inmediato, sin permanencia mínima, que siempre responde. */
+  /** «¿Quién es?»: immediate new encounter, with no minimum dwell time, that always answers. */
   request() {
     this.reset();
     this.skipDwell = true;
@@ -92,13 +92,13 @@ export class DecisionEngine {
     this.announced = false;
     this.anchor = null;
     this.changeCount = 0;
-    this.skipDwell = true; // la persona ya está frente al portador: no se espera la permanencia
+    this.skipDwell = true; // the person is already in front of the wearer: no need to wait for the dwell time
     this.reason = 'cambio';
     this.silent = !this.cfg.announceOnChange;
     this.state = 'observando';
   }
 
-  /** Sigue al rostro anunciado; devuelve true si la persona cambió. */
+  /** Tracks the announced face; returns true if the person changed. */
   private tracksChange(emb: Float32Array): boolean {
     if (!this.anchor) {
       this.anchor = emb.slice();
@@ -106,7 +106,7 @@ export class DecisionEngine {
     }
     if (cos(this.anchor, emb) >= this.cfg.changeThreshold) {
       this.changeCount = 0;
-      // Actualización lenta del ancla para acompañar cambios de pose e iluminación.
+      // Slow update of the anchor to follow changes in pose and lighting.
       let n = 0;
       for (let i = 0; i < emb.length; i++) {
         this.anchor[i] = 0.85 * this.anchor[i] + 0.15 * emb[i];
@@ -138,14 +138,14 @@ export class DecisionEngine {
     this.lastSeen = o.tMs;
 
     if (this.announced) {
-      // RN-08: silencio mientras sea la misma persona; un cambio abre un encuentro nuevo.
+      // Stay silent while it is the same person; a change opens a new encounter.
       if (o.usable && o.embedding && this.tracksChange(o.embedding)) this.newEncounter(o.tMs);
       else return null;
     }
 
     if (!o.usable) {
       if (++this.failed >= c.maxFailedFrames) {
-        // CU-02 E1: tres cuadros inutilizables interrumpen el ciclo sin avisar.
+        // Three unusable frames in a row interrupt the cycle without announcing anything.
         this.window = [];
         this.failed = 0;
         this.firstSeen = o.tMs;
@@ -183,7 +183,7 @@ export class DecisionEngine {
       return this.emit({ kind: 'abstain', identityId: null, sMax, hits: this.window.length - rejects, ...base }, o);
     }
     if (rejects >= c.confirmHits) {
-      // Nadie del círculo. No se registra nada biométrico (RF-09): sólo se decide si decirlo.
+      // Nobody from the circle. Nothing biometric is recorded: it only decides whether to say so.
       this.state = 'descartando';
       return this.emit({ kind: 'unknown', identityId: null, sMax, hits: rejects, ...base }, o);
     }

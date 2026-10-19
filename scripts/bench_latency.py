@@ -1,8 +1,8 @@
-"""Latencia por etapa de Pipeline.process en CPU (core) y costo de la búsqueda 1:N según el tamaño de la galería.
+"""Per-stage latency of Pipeline.process on CPU (core) and cost of the 1:N search by gallery size.
 
-Los cuadros miden 1280×720 y se arman con los rostros sintéticos de assets/faces, con un leve jitter
-de escala y traslación para que no sean idénticos. La galería tiene 50 identidades: Marta (5 tomas) y 49 plantillas
-de LFW. Se descartan los primeros cuadros (warm-up de onnxruntime y de las cachés de anclas).
+The frames are 1280×720 and are built from the synthetic faces in assets/faces, with a slight scale and
+translation jitter so that they are not identical. The gallery has 50 identities: Marta (5 shots) and 49 LFW
+templates. The first frames are discarded (warm-up of onnxruntime and of the anchor caches).
 
     .venv/bin/python scripts/bench_latency.py [--frames 300] [--out docs/eval/latencia_core.json]
 """
@@ -32,7 +32,7 @@ ROOT = Path(__file__).resolve().parents[1]
 FACES = ROOT / "assets" / "faces"
 MARTA_SHOTS = ["marta_frontal", "marta_sonrisa", "marta_giro_izq", "marta_giro_der", "marta_luz_baja"]
 SCENES = MARTA_SHOTS + ["marta_barbijo", "tomas_frontal", "desconocido_frontal"]
-FACE_CENTER = (625.0, 400.0)       # centro aproximado del rostro en las imágenes de 1200×896
+FACE_CENTER = (625.0, 400.0)       # approximate center of the face in the 1200×896 images
 W, H = 1280, 720
 STAGES = ["preproceso", "deteccion+alineacion", "embedding", "busqueda", "decision"]
 
@@ -44,7 +44,7 @@ def stats(xs) -> dict:
 
 
 def make_frame(scene: np.ndarray, rng: random.Random) -> np.ndarray:
-    """Cuadro de 1280×720 con el rostro centrado ±60 px y escala 1,07–1,25 (siempre cubre el cuadro entero)."""
+    """1280×720 frame with the face centered ±60 px and scale 1.07–1.25 (always covers the whole frame)."""
     s = (W / scene.shape[1]) * (1 + rng.uniform(0.0, 0.17))
     tx = np.clip(W / 2 - FACE_CENTER[0] * s + rng.uniform(-60, 60), W - scene.shape[1] * s, 0)
     ty = np.clip(H / 2 - FACE_CENTER[1] * s + rng.uniform(-60, 60), H - scene.shape[0] * s, 0)
@@ -75,7 +75,7 @@ def build_gallery(pipe: Pipeline, lfw: Path, tmp: Path, n_lfw: int, rng: random.
         added += 1
         if added == n_lfw:
             break
-    assert len(gal.active()) == n_lfw + 1, f"la galería quedó con {len(gal.active())} identidades"
+    assert len(gal.active()) == n_lfw + 1, f"the gallery ended up with {len(gal.active())} identities"
     return gal
 
 
@@ -96,7 +96,7 @@ def bench_process(pipe: Pipeline, n_frames: int, warmup: int, rng: random.Random
         reached += "embedding" in res.timings_ms
         if "embedding" in res.timings_ms:
             seen[SCENES[i % len(SCENES)]].append((res.s_max, res.candidate.name if res.candidate else None))
-    # Control: los cuadros de Marta deben dar s_máx alto con Marta como candidata; los demás, bajo.
+    # Control: Marta's frames must give a high s_max with Marta as the candidate; the others, a low one.
     control = {n: {"cuadros": len(v), "s_max_media": float(np.mean([s for s, _ in v])) if v else None,
                    "candidata_marta": float(np.mean([c == "Marta" for _, c in v])) if v else None}
                for n, v in seen.items()}
@@ -108,7 +108,7 @@ def bench_process(pipe: Pipeline, n_frames: int, warmup: int, rng: random.Random
 
 
 def bench_micro(pipe: Pipeline, reps: int = 300) -> dict:
-    """Costos que Pipeline.process no reporta por separado: el warpAffine de la alineación y la evaluación de calidad."""
+    """Costs that Pipeline.process does not report separately: the alignment warpAffine and the quality assessment."""
     img = enhance(cv2.imread(str(FACES / "marta_frontal.png")))
     face, crop = pipe.best_face(img)
     out = {}
@@ -127,11 +127,11 @@ def bench_micro(pipe: Pipeline, reps: int = 300) -> dict:
 
 
 def bench_search(sizes: list[int], rng: np.random.Generator) -> dict:
-    """Búsqueda exhaustiva vs N con plantillas aleatorias normalizadas.
+    """Exhaustive search vs N with random normalized templates.
 
-    - ``gallery_search``: Gallery.search tal cual (reconstruye la matriz de plantillas en cada consulta).
-    - ``matriz_prearmada``: producto matricial + argsort sobre una matriz ya armada (lo que costaría con caché).
-    - ``solo_matmul``: sólo ``mat @ q``.
+    - ``gallery_search``: Gallery.search as is (rebuilds the template matrix on every query).
+    - ``matriz_prearmada``: matrix product + argsort over an already-built matrix (what it would cost with a cache).
+    - ``solo_matmul``: just ``mat @ q``.
     """
     out = {}
     with tempfile.TemporaryDirectory() as d:
@@ -167,7 +167,7 @@ def sysctl(key: str) -> str:
 
 
 def main() -> None:
-    ap = argparse.ArgumentParser(description="Latencia del pipeline de referencia (CPU)")
+    ap = argparse.ArgumentParser(description="Latency of the reference pipeline (CPU)")
     ap.add_argument("--frames", type=int, default=300)
     ap.add_argument("--warmup", type=int, default=10)
     ap.add_argument("--lfw", type=Path, default=ROOT / "data" / "lfw")
@@ -186,7 +186,7 @@ def main() -> None:
         gal = build_gallery(pipe, args.lfw, tmp, n_lfw=49, rng=rng)
         pipe.gallery = gal
         env["galeria"] = len(gal.active())
-        print(f"{env['cpu']} · onnxruntime {env['onnxruntime']} · galería de {env['galeria']}")
+        print(f"{env['cpu']} · onnxruntime {env['onnxruntime']} · gallery of {env['galeria']}")
         proc = bench_process(pipe, args.frames, args.warmup, rng)
         micro = bench_micro(pipe)
         env["carga_final"] = os.getloadavg()
@@ -196,16 +196,16 @@ def main() -> None:
     rep = {"entorno": env, "cuadro": f"{W}×{H}", "pipeline": proc, "micro": micro, "busqueda_vs_N": search}
     args.out.write_text(json.dumps(rep, indent=2, ensure_ascii=False))
 
-    print(f"\nPipeline.process · {proc['cuadros_medidos']} cuadros {W}×{H} (ms)")
-    print(f"{'etapa':<24}{'p50':>9}{'p95':>9}{'media':>9}")
+    print(f"\nPipeline.process · {proc['cuadros_medidos']} frames {W}×{H} (ms)")
+    print(f"{'stage':<24}{'p50':>9}{'p95':>9}{'media':>9}")
     for k, v in {**proc["etapas_ms"], "TOTAL": proc["total_ms"]}.items():
         print(f"{k:<24}{v['p50']:>9.3f}{v['p95']:>9.3f}{v['media']:>9.3f}")
     print("\nMicro (ms):", {k: round(v["p50"], 4) for k, v in micro.items()})
-    print("\nBúsqueda vs N, p50 / p95 (ms)")
+    print("\nSearch vs N, p50 / p95 (ms)")
     print(f"{'N':>6}" + "".join(f"{k:>30}" for k in ("gallery_search", "matriz_prearmada", "solo_matmul")))
     for n, row in search.items():
         print(f"{n:>6}" + "".join(f"{row[k]['p50']:>16.4f} /{row[k]['p95']:>9.4f}" for k in row))
-    print(f"\nReporte en {args.out}")
+    print(f"\nReport in {args.out}")
 
 
 if __name__ == "__main__":

@@ -1,12 +1,13 @@
-"""Interfaz de captura abstracta (sección 7.3, «riesgo de plataforma y plan alternativo»).
+"""Abstract capture interface (platform-risk fallback plan: the glasses can be swapped for a
+phone or webcam without touching the pipeline).
 
-El pipeline no sabe de dónde vienen los cuadros. Implementaciones:
+The pipeline does not know where frames come from. Implementations:
 
-- ``WebcamSource``      — webcam o cámara del teléfono vía OpenCV (banco de pruebas).
-- ``VideoFileSource``   — video grabado; reproduce el mismo experimento de forma determinista.
-- ``GlassesBridgeSource`` — cuadros de las Ray-Ban Meta reenviados por la app Android
-  (Meta Wearables Device Access Toolkit) por un socket local. En producción la app
-  ejecuta el pipeline en el teléfono; el puente sólo existe para medir en el banco de pruebas.
+- ``WebcamSource``      — webcam or phone camera through OpenCV (test bench).
+- ``VideoFileSource``   — recorded video; replays the same experiment deterministically.
+- ``GlassesBridgeSource`` — frames from the Ray-Ban Meta glasses forwarded by the Android app
+  (Meta Wearables Device Access Toolkit) over a local socket. In production the app runs the
+  pipeline on the phone; the bridge only exists for measuring on the test bench.
 """
 from __future__ import annotations
 
@@ -21,7 +22,7 @@ import numpy as np
 @dataclass
 class Frame:
     image: np.ndarray        # BGR uint8
-    t_ms: float              # marca de tiempo monotónica de adquisición
+    t_ms: float              # monotonic acquisition timestamp
     source: str
 
 
@@ -33,7 +34,7 @@ class CaptureSource(ABC):
 
     @abstractmethod
     def read(self) -> Frame | None:
-        """Devuelve el próximo cuadro o None si la fuente terminó."""
+        """Returns the next frame, or None if the source has ended."""
 
     @abstractmethod
     def close(self) -> None: ...

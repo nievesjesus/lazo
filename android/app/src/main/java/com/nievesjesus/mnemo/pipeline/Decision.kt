@@ -1,6 +1,6 @@
 package com.nievesjesus.mnemo.pipeline
 
-/** Parámetros por defecto: iguales a core/mnemo/config.py y web/src/pipeline/config.ts. */
+/** Default parameters: identical to core/mnemo/config.py and web/src/pipeline/config.ts. */
 data class DecisionConfig(
     var tauLow: Float = 0.30f,
     var tauHigh: Float = 0.38f,
@@ -10,13 +10,13 @@ data class DecisionConfig(
     var dwellMs: Long = 1500,
     val encounterGapMs: Long = 8000,
     val maxFailedFrames: Int = 3,
-    /** Coseno mínimo con el rostro anunciado para seguir siendo «la misma persona». */
+    /** Minimum cosine with the announced face to remain «the same person». */
     val changeThreshold: Float = 0.45f,
-    /** Cuadros seguidos por debajo ⇒ cambio de persona ⇒ encuentro nuevo. */
+    /** Consecutive frames below it ⇒ change of person ⇒ new encounter. */
     val changeFrames: Int = 3,
-    /** Al cambiar de persona, avisar sin que pregunten. */
+    /** On a change of person, announce without being asked. */
     var announceOnChange: Boolean = true,
-    /** Decir «no es nadie conocido» sin que pregunten (a pedido, siempre). */
+    /** Say «no es nadie conocido» without being asked (on request, always). */
     var announceUnknown: Boolean = true,
 )
 
@@ -41,16 +41,16 @@ fun classify(s: Float, lo: Float, hi: Float) = when {
   else -> Zone.REJECT
 }
 
-/** kind: MATCH ⇒ nombrar · ABSTAIN ⇒ «no estoy seguro» · REJECT ⇒ «no es nadie conocido». */
+/** kind: MATCH ⇒ name the person · ABSTAIN ⇒ «not sure» · REJECT ⇒ «nobody from the circle». */
 data class Announcement(
     val kind: Zone, val identityId: String?, val sMax: Float, val hits: Int, val window: Int, val latencyMs: Long,
     val reason: Reason = Reason.ENCUENTRO,
 )
 
 /**
- * Etapa 07 · decisión con rechazo + confirmación 3 de 4. Un encuentro produce a lo sumo una frase
- * (RN-08) y termina sin rostro durante `encounterGapMs` o cuando CAMBIA LA PERSONA: el embedding
- * del cuadro deja de parecerse al del rostro anunciado durante `changeFrames` cuadros seguidos.
+ * Stage 07 · decision with rejection + 3-of-4 confirmation. An encounter produces at most one
+ * phrase and ends when there is no face for `encounterGapMs` or when THE PERSON CHANGES: the
+ * frame's embedding stops resembling that of the announced face for `changeFrames` consecutive frames.
  */
 class DecisionEngine(val cfg: DecisionConfig = DecisionConfig()) {
   var state = State.EN_REPOSO
@@ -76,7 +76,7 @@ class DecisionEngine(val cfg: DecisionConfig = DecisionConfig()) {
     skipDwell = false; reason = Reason.ENCUENTRO; silent = false
   }
 
-  /** «¿Quién es?»: encuentro nuevo inmediato, sin permanencia mínima, que siempre responde. */
+  /** «¿Quién es?»: immediate new encounter, with no minimum dwell time, that always answers. */
   fun request() {
     reset()
     skipDwell = true
@@ -96,7 +96,7 @@ class DecisionEngine(val cfg: DecisionConfig = DecisionConfig()) {
     val a = anchor ?: run { anchor = emb.copyOf(); return false }
     if (dot(a, emb) >= cfg.changeThreshold) {
       changeCount = 0
-      for (i in a.indices) a[i] = 0.85f * a[i] + 0.15f * emb[i] // acompaña cambios de pose y luz
+      for (i in a.indices) a[i] = 0.85f * a[i] + 0.15f * emb[i] // follows changes in pose and lighting
       anchor = l2normalize(a)
       return false
     }

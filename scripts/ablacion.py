@@ -1,12 +1,12 @@
-"""Ablación de las etapas del pipeline sobre LFW (preprocesamiento y alineación) y sensibilidad al ancho de la banda.
+"""Ablation of the pipeline stages on LFW (preprocessing and alignment) and sensitivity to the band width.
 
-Corre ``mnemo-eval`` (mismo protocolo y misma semilla) para cuatro configuraciones — completa, sin alineación
-(``--no-align``), sin preprocesamiento (``--no-enhance``) y sin ambas — derivando τ en validación para el FPIR
-objetivo y midiendo en prueba. Después repite la configuración completa con ``--band`` 0,04 / 0,08 / 0,12.
+Runs ``mnemo-eval`` (same protocol and same seed) for four configurations — full, no alignment
+(``--no-align``), no preprocessing (``--no-enhance``) and neither — deriving τ on validation for the target
+FPIR and measuring on test. Then repeats the full configuration with ``--band`` 0.04 / 0.08 / 0.12.
 
     .venv/bin/python scripts/ablacion.py [data/lfw]
 
-Salidas: docs/eval/ablacion_lfw.json, docs/eval/ablacion_lfw.md y docs/eval/ablacion_lfw.png.
+Outputs: docs/eval/ablacion_lfw.json, docs/eval/ablacion_lfw.md and docs/eval/ablacion_lfw.png.
 """
 import json
 import re
@@ -22,18 +22,24 @@ ROOT = Path(__file__).resolve().parents[1]
 DATA = Path(sys.argv[1]) if len(sys.argv) > 1 else ROOT / "data" / "lfw"
 OUT = ROOT / "docs" / "eval"
 TARGET_FPIR = 0.01
-CONFIGS = [  # nombre, flags de mnemo-eval
+CONFIGS = [  # name (also the key in ablacion_lfw.json, so it stays as is), mnemo-eval flags
     ("completa", []),
     ("sin alineación", ["--no-align"]),
     ("sin preprocesamiento", ["--no-enhance"]),
     ("sin ambas", ["--no-align", "--no-enhance"]),
 ]
+LABELS = {  # display names for the table and the figure
+    "completa": "full",
+    "sin alineación": "no alignment",
+    "sin preprocesamiento": "no preprocessing",
+    "sin ambas": "neither",
+}
 BANDS = (0.04, 0.08, 0.12)
 NS = ("N=10", "N=25", "N=50")
 
 
 def run_eval(flags: list[str], tag: str) -> dict:
-    """Ejecuta mnemo-eval y devuelve su reporte más lo que imprime sobre las imágenes sin rostro."""
+    """Runs mnemo-eval and returns its report plus what it prints about the images with no face."""
     with tempfile.TemporaryDirectory() as d:
         out = Path(d) / "rep.json"
         cmd = [str(ROOT / ".venv" / "bin" / "mnemo-eval"), str(DATA), "--target-fpir", str(TARGET_FPIR), "--seed", "0",
@@ -41,15 +47,19 @@ def run_eval(flags: list[str], tag: str) -> dict:
         print(f"[{tag}] {' '.join(cmd[1:])}", flush=True)
         log = subprocess.run(cmd, capture_output=True, text=True, check=True).stdout
         rep = json.loads(out.read_text())
-    m = re.search(r"(\d+) identidades útiles → validación (\d+), prueba (\d+)", log)
-    s = re.search(r"(\d+) de (\d+) imágenes sin rostro detectado; (\d+) personas", log)
-    rep["_poblacion"] = {"identidades_utiles": int(m[1]), "validacion": int(m[2]), "prueba": int(m[3]),
-                         "imagenes": int(s[2]), "sin_rostro": int(s[1]), "personas_descartadas": int(s[3])}
+    # The first two lines of mnemo-eval's output are "<useful identities> … validation <v>, test <t>" and
+    # "<images without a face> of <images> …; <people dropped> …". The integers are read by position,
+    # so this does not depend on how the messages are worded.
+    first, second = [l for l in log.splitlines() if l.strip()][:2]
+    useful, val, test = map(int, re.findall(r"\d+", first)[:3])
+    no_face, images, dropped = map(int, re.findall(r"\d+", second)[:3])
+    rep["_poblacion"] = {"identidades_utiles": useful, "validacion": val, "prueba": test,
+                         "imagenes": images, "sin_rostro": no_face, "personas_descartadas": dropped}
     return rep
 
 
 def wilson(k: int, n: int, z: float = 1.96) -> tuple[float, float]:
-    """Intervalo de Wilson al 95 % para una proporción k/n."""
+    """95% Wilson interval for a proportion k/n."""
     if n == 0:
         return float("nan"), float("nan")
     p = k / n
@@ -60,8 +70,8 @@ def wilson(k: int, n: int, z: float = 1.96) -> tuple[float, float]:
 
 
 def fnir_at_fixed_fpir(sc: dict, target: float) -> tuple[float, float]:
-    """FNIR con τ ajustado sobre las propias impostoras de prueba (FPIR ≤ objetivo): aísla el efecto de la etapa
-    de la variabilidad de derivar τ en validación. Devuelve (τ, FNIR)."""
+    """FNIR with τ fitted on the test impostors themselves (FPIR ≤ target): it isolates the effect of the stage
+    from the variability of deriving τ on validation. Returns (τ, FNIR)."""
     imp = np.sort(np.array(sc["impostoras"]))[::-1]
     k = int(np.floor(target * len(imp)))
     tau = float(np.nextafter(imp[k], np.inf))
@@ -101,47 +111,47 @@ def summarize(rep: dict) -> dict:
 
 
 def pc(v: float, d: int = 2) -> str:
-    return f"{v * 100:.{d}f}".replace(".", ",") + " %"
+    return f"{v * 100:.{d}f}%"
 
 
-def es(v: float, d: int = 3) -> str:
-    return f"{v:.{d}f}".replace(".", ",")
+def num(v: float, d: int = 3) -> str:
+    return f"{v:.{d}f}"
 
 
 def markdown(res: dict) -> str:
-    L = ["# Ablación de etapas del pipeline sobre LFW",
+    L = ["# Ablation of pipeline stages on LFW",
          "",
-         f"Protocolo de `mnemo-eval` (semilla 0, partición por identidad, τ_alta derivado en validación para FPIR objetivo "
-         f"{pc(TARGET_FPIR, 0)}, banda 0,08). Sondas de prueba por N en la columna «n»; los intervalos son de Wilson al 95 %.",
+         f"`mnemo-eval` protocol (seed 0, identity-level split, τ_high derived on validation for a target FPIR of "
+         f"{pc(TARGET_FPIR, 0)}, band 0.08). Test probes for each N are in the \"n\" column; intervals are 95% Wilson intervals.",
          ""]
     for n in NS:
-        L += [f"## Galería {n}", "",
-              "| Configuración | τ_alta | FPIR | FNIR [IC 95 %] | Rango 1 | Abstención | n (gen. / imp.) | FNIR a FPIR = 1 % (τ en prueba) |",
+        L += [f"## Gallery {n}", "",
+              "| Configuration | τ_high | FPIR | FNIR [95% CI] | Rank-1 | Abstention | n (gen. / imp.) | FNIR at FPIR = 1% (τ on test) |",
               "|---|---:|---:|---:|---:|---:|---:|---:|"]
         for name, _ in CONFIGS:
             r = res["configuraciones"][name]["por_N"].get(n)
             if r is None:
                 continue
             lo, hi = r["FNIR_ic95"]
-            L.append(f"| {name} | {es(r['tau_alta'])} | {pc(r['FPIR'])} | {pc(r['FNIR'])} [{pc(lo, 1)}–{pc(hi, 1)}] | "
+            L.append(f"| {LABELS[name]} | {num(r['tau_alta'])} | {pc(r['FPIR'])} | {pc(r['FNIR'])} [{pc(lo, 1)}–{pc(hi, 1)}] | "
                      f"{pc(r['rank1'])} | {pc(r['abstencion'])} | {r['n_genuinas']} / {r['n_impostoras']} | "
                      f"{pc(r['FNIR_a_FPIR_1pct_tau_prueba'])} |")
         L.append("")
-    L += ["## Población por configuración", "",
-          "| Configuración | Identidades útiles | Validación / prueba | Imágenes sin rostro detectado | Personas con < 2 usables |",
+    L += ["## Population by configuration", "",
+          "| Configuration | Useful identities | Validation / test | Images with no face detected | People with < 2 usable |",
           "|---|---:|---:|---:|---:|"]
     for name, _ in CONFIGS:
         p = res["configuraciones"][name]["poblacion"]
-        L.append(f"| {name} | {p['identidades_utiles']} | {p['validacion']} / {p['prueba']} | "
-                 f"{p['sin_rostro']} de {p['imagenes']} | {p['personas_descartadas']} |")
-    L += ["", "## Sensibilidad al ancho de la banda de abstención (configuración completa, N = 50)", "",
-          "FNIR, FPIR y rango 1 sólo dependen de τ_alta, que no cambia con la banda: lo que se mueve es τ_baja y, con él, "
-          "cuántas sondas caen en «no estoy seguro» en lugar de descartarse en silencio.", "",
-          "| Banda | τ_baja | τ_alta | Abstención (todas) | Abstención en impostoras | Abstención en genuinas | FNIR | FPIR |",
+        L.append(f"| {LABELS[name]} | {p['identidades_utiles']} | {p['validacion']} / {p['prueba']} | "
+                 f"{p['sin_rostro']} of {p['imagenes']} | {p['personas_descartadas']} |")
+    L += ["", "## Sensitivity to the abstention band width (full configuration, N = 50)", "",
+          "FNIR, FPIR and rank-1 depend only on τ_high, which does not change with the band: what moves is τ_low and, with it, "
+          "how many probes fall into «no estoy seguro» (\"I'm not sure\") instead of being silently discarded.", "",
+          "| Band | τ_low | τ_high | Abstention (all) | Abstention on impostors | Abstention on genuine | FNIR | FPIR |",
           "|---:|---:|---:|---:|---:|---:|---:|---:|"]
     for b in BANDS:
         r = res["sensibilidad_banda"][f"{b:.2f}"]["por_N"]["N=50"]
-        L.append(f"| {es(b, 2)} | {es(r['tau_baja'])} | {es(r['tau_alta'])} | {pc(r['abstencion'])} | "
+        L.append(f"| {num(b, 2)} | {num(r['tau_baja'])} | {num(r['tau_alta'])} | {pc(r['abstencion'])} | "
                  f"{pc(r['abstencion_impostoras'])} | {pc(r['abstencion_genuinas'])} | {pc(r['FNIR'])} | {pc(r['FPIR'])} |")
     return "\n".join(L) + "\n"
 
@@ -159,14 +169,14 @@ def figure(res: dict) -> None:
                 continue
             xs.append(j + (i - 1.5) * w)
             ys.append(r["FNIR_a_FPIR_1pct_tau_prueba"] * 100)
-        ax.bar(xs, ys, w * 0.92, color=shades[i], edgecolor="#111", lw=0.5, label=name)
+        ax.bar(xs, ys, w * 0.92, color=shades[i], edgecolor="#111", lw=0.5, label=LABELS[name])
         for x, y in zip(xs, ys):
-            ax.text(x, y + 0.5, f"{y:.1f}".replace(".", ","), ha="center", va="bottom", fontsize=5.6)
+            ax.text(x, y + 0.5, f"{y:.1f}", ha="center", va="bottom", fontsize=5.6)
     ax.set_xticks(range(len(NS)))
     ax.set_xticklabels([n.replace("=", " = ") for n in NS])
-    ax.set_xlabel("tamaño de la galería")
-    ax.set_ylabel("FNIR a FPIR = 1 % (%)")
-    ax.set_title("Ablación · LFW · τ fijado en prueba", fontsize=8, loc="left")
+    ax.set_xlabel("gallery size")
+    ax.set_ylabel("FNIR at FPIR = 1% (%)")
+    ax.set_title("Ablation · LFW · τ fixed on test", fontsize=8, loc="left")
     ax.legend(fontsize=6.3, frameon=False, loc="upper left", ncol=2, columnspacing=1.0, handlelength=1.2)
     ax.grid(axis="y", alpha=0.25, lw=0.4)
     ax.set_axisbelow(True)
@@ -180,12 +190,12 @@ def main() -> None:
     res = {"protocolo": {"semilla": 0, "target_fpir": TARGET_FPIR, "datos": str(DATA.relative_to(ROOT)) if DATA.is_relative_to(ROOT) else str(DATA)},
            "configuraciones": {}, "sensibilidad_banda": {}}
     for name, flags in CONFIGS:
-        res["configuraciones"][name] = summarize(run_eval(flags, name))
+        res["configuraciones"][name] = summarize(run_eval(flags, LABELS[name]))
     for b in BANDS:
-        if b == 0.08:   # es el valor por defecto: la configuración completa ya lo corrió
+        if b == 0.08:   # it is the default value: the full configuration already ran it
             res["sensibilidad_banda"][f"{b:.2f}"] = res["configuraciones"]["completa"]
         else:
-            res["sensibilidad_banda"][f"{b:.2f}"] = summarize(run_eval(["--band", str(b)], f"banda {b}"))
+            res["sensibilidad_banda"][f"{b:.2f}"] = summarize(run_eval(["--band", str(b)], f"band {b}"))
     (OUT / "ablacion_lfw.json").write_text(json.dumps(res, indent=2, ensure_ascii=False))
     (OUT / "ablacion_lfw.md").write_text(markdown(res))
     figure(res)

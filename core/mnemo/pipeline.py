@@ -1,7 +1,7 @@
-"""Pipeline de ocho etapas (figura 7): adquisición → preprocesamiento → detección → alineación
-→ embedding → búsqueda 1:N → decisión con rechazo → salida.
+"""Eight-stage pipeline: 01 acquisition → 02 preprocessing → 03 detection → 04 alignment
+→ 05 embedding → 06 1:N search → 07 decision with rejection → 08 output.
 
-El cuadro se descarta al terminar ``process``: nada de la imagen sobrevive a la llamada (RN-02).
+The frame is discarded when ``process`` returns: nothing of the image survives the call.
 """
 from __future__ import annotations
 
@@ -19,6 +19,7 @@ from .gallery import Gallery, Identity
 from .preprocess import enhance
 from .quality import QualityReport, assess
 
+# Phrases spoken to the wearer (product language: Rioplatense Spanish).
 ABSTAIN_PHRASE = "Hay alguien, pero no lo reconozco."
 UNKNOWN_PHRASE = "No es nadie conocido. Podés invitarlo a sumarse al círculo."
 NOBODY_PHRASE = "No veo a nadie frente a vos."
@@ -47,7 +48,7 @@ class Pipeline:
         self.embedder = FaceEmbedder(cfg.rec_model, providers)
         self.engine = DecisionEngine(cfg.decision)
 
-    # -- utilidades compartidas con el enrolamiento ----------------------------
+    # -- helpers shared with enrollment ----------------------------------------
     def best_face(self, img: np.ndarray) -> tuple[Face | None, np.ndarray | None]:
         faces = self.detector.detect(img, score_thresh=self.cfg.quality.min_det_score, max_faces=1)
         if not faces:
@@ -55,7 +56,7 @@ class Pipeline:
         return faces[0], align(img, faces[0].kps)
 
     def enroll_shot(self, img_bgr: np.ndarray, allow_profile: bool) -> tuple[np.ndarray | None, QualityReport | None]:
-        """Una toma guiada (RF-03/RF-04): devuelve el vector o None si se rechaza. La imagen se descarta."""
+        """One guided shot: returns the vector, or None if it is rejected. The image is discarded."""
         face, crop = self.best_face(enhance(img_bgr))
         if face is None:
             return None, None
@@ -64,7 +65,7 @@ class Pipeline:
             return None, q
         return self.embedder.embed(crop)[0], q
 
-    # -- ciclo de reconocimiento -------------------------------------------------
+    # -- recognition cycle -------------------------------------------------------
     def process(self, img_bgr: np.ndarray, t_ms: float) -> FrameResult:
         res = FrameResult(t_ms=t_ms)
         tick = time.perf_counter()
