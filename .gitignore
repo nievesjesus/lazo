@@ -8,18 +8,3 @@ eval_report.json
 .DS_Store
 web/public/group-test.jpg
 data/
-
-# Entrega final: medios pesados que se regeneran (ver README, «Informe y video»)
-docs/video/out/*.mp4
-docs/video/out/contact.png
-docs/video/rec/*.mp4
-docs/video/shared/casting*/
-/mnemo-*.zip
-docs/video/out/com-*/
-docs/video/out/trailer-stills/
-# Tomas generadas con IA y grabaciones de la app (pesadas, se comparten aparte)
-docs/video/comercial/live/*.mp4
-docs/video/comercial/rec/*.mp4
-docs/video/comercial/rec/raw/
-docs/video/trailer/live/*.mp4
-docs/video/trailer/shared/public/*/*.wav

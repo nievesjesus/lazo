@@ -2,7 +2,7 @@
 //
 // Levanta su propio Vite (puerto BENCH_PORT, 5311 por omisión), abre la app e importa los módulos de Vite dentro de la
 // página (`await import('/src/pipeline/pipeline.ts')`) para medir `Pipeline.process` sobre cuadros dibujados en un
-// canvas a partir de los rostros sintéticos de docs/video/assets/faces (servidos con page.route, sin tocar web/public).
+// canvas a partir de los rostros sintéticos de assets/faces (servidos con page.route, sin tocar web/public).
 // La galería (IndexedDB real de la página) tiene 50 identidades: Marta (5 tomas) y 49 plantillas aleatorias.
 // Se repite con y sin aislamiento de origen cruzado: el segundo caso quita COOP/COEP de las respuestas, así
 // `crossOriginIsolated` queda en false y models.ts usa 1 hilo de WASM en vez de min(4, núcleos).
@@ -15,7 +15,7 @@ import { fileURLToPath } from 'node:url';
 import { chromium } from 'playwright-core';
 
 const WEB = resolve(dirname(fileURLToPath(import.meta.url)), '..');
-const FACES = join(WEB, '..', 'docs', 'video', 'assets', 'faces');
+const FACES = join(WEB, '..', 'assets', 'faces');
 const CHROME = process.env.CHROME ?? '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
 const PORT = Number(process.env.BENCH_PORT ?? 5311);
 const N = Number(process.argv[2] ?? 200);

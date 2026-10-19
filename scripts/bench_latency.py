@@ -1,6 +1,6 @@
 """Latencia por etapa de Pipeline.process en CPU (core) y costo de la búsqueda 1:N según el tamaño de la galería.
 
-Los cuadros miden 1280×720 y se arman con los rostros sintéticos de docs/video/assets/faces, con un leve jitter
+Los cuadros miden 1280×720 y se arman con los rostros sintéticos de assets/faces, con un leve jitter
 de escala y traslación para que no sean idénticos. La galería tiene 50 identidades: Marta (5 tomas) y 49 plantillas
 de LFW. Se descartan los primeros cuadros (warm-up de onnxruntime y de las cachés de anclas).
 
@@ -29,7 +29,7 @@ from mnemo.preprocess import enhance
 from mnemo.quality import assess
 
 ROOT = Path(__file__).resolve().parents[1]
-FACES = ROOT / "docs" / "video" / "assets" / "faces"
+FACES = ROOT / "assets" / "faces"
 MARTA_SHOTS = ["marta_frontal", "marta_sonrisa", "marta_giro_izq", "marta_giro_der", "marta_luz_baja"]
 SCENES = MARTA_SHOTS + ["marta_barbijo", "tomas_frontal", "desconocido_frontal"]
 FACE_CENTER = (625.0, 400.0)       # centro aproximado del rostro en las imágenes de 1200×896
