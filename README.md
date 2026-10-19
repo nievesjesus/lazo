@@ -1,74 +1,198 @@
-# Lazo (antes MNEMO)
+<div align="center">
 
-Prueba de concepto del TP de **Visión por Computadora** (Maestría en IA, Universidad de Palermo).
-Lazo (antes MNEMO) es un sistema de reconocimiento facial **consentido**, como apoyo a la memoria social de personas con demencia. Está pensado para gafas inteligentes, pero es software: se conecta a las gafas, a la cámara del teléfono o a una webcam a través de una interfaz de captura abstracta. Sólo identifica a quienes se enrolaron en persona, todo el cómputo ocurre en el dispositivo y, ante la duda, dice «no estoy seguro» antes que arriesgar un nombre.
+<img src="docs/assets/social-preview.png" alt="Lazo: whispers who's in front of you. A woman's face seen through smart glasses, next to the LAZO wordmark." width="100%">
 
-Lazo es el nombre público del proyecto; el paquete Python (`mnemo`, `mnemo-eval`) y la app Android conservan el nombre MNEMO.
+# Lazo
 
-El mismo pipeline de ocho etapas (preprocesamiento, calidad, detección, alineación, *embedding*, plantilla, búsqueda y decisión) está implementado tres veces, con los mismos modelos y los mismos umbrales:
+**Consent-first, on-device face recognition that whispers to a person with dementia who is in front of them; built for smart glasses, it works with any camera.**
 
-| Carpeta | Qué es | Estado |
-|---|---|---|
-| [`core/`](core) | Banco de pruebas en Python: pipeline de referencia, galería cifrada, CLI con webcam, evaluación FPIR/FNIR y curva DET | 26 tests OK, incluidos los de extremo a extremo con los modelos reales |
-| [`web/`](web) | Demo web con webcam o cámara del teléfono. Vista de quien usa las gafas y app del cuidador, todo en el navegador | 23 tests unitarios + 5 aserciones e2e OK en Chrome headless. Paridad con Python: coseno ≥ 0,995 por rostro |
-| [`android/`](android) | App Android con la **interfaz de captura abstracta**: cámara del teléfono (CameraX), **Ray-Ban Meta** (Meta Wearables DAT 1.0) y gafas simuladas (MockDeviceKit) | Escrita contra la API del sample oficial; **todavía no compilada** (ver limitaciones) |
+[![CI](https://github.com/nievesjesus/lazo/actions/workflows/ci.yml/badge.svg)](https://github.com/nievesjesus/lazo/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
+![Python 3.11](https://img.shields.io/badge/python-3.11-3776AB?logo=python&logoColor=white)
+![TypeScript](https://img.shields.io/badge/TypeScript-3178C6?logo=typescript&logoColor=white)
+![ONNX Runtime Web](https://img.shields.io/badge/ONNX%20Runtime%20Web-005CED?logo=onnx&logoColor=white)
+![100% on-device](https://img.shields.io/badge/processing-100%25%20on--device-2ea44f)
+![Status: research prototype](https://img.shields.io/badge/status-research%20prototype-orange)
 
-## Origen y resultados
+[What it does](#what-it-does) · [How it works](#how-it-works) · [Screenshots](#screenshots) · [Results](#results) · [Quick start](#quick-start) · [Responsible use](#responsible-use) · [Known limitations](#known-limitations)
 
-Este repositorio es la prueba de concepto del TP de Visión por Computadora de la Maestría en IA (Universidad de Palermo). La evaluación sobre LFW está en [`docs/eval/`](docs/eval): reporte, distribuciones, curva DET, error vs. umbral, ablación y latencias.
+<a href="https://github.com/nievesjesus/lazo/releases/download/v0.1.0/lazo-trailer.mp4"><img src="docs/assets/trailer-play.jpg" alt="Lazo trailer: click to play the video" width="720"></a>
 
-Resultados principales sobre LFW (partición por identidad, τ derivado en validación para FPIR = 1 % y congelado antes de prueba):
+<sub>Trailer (1:30, Spanish)</sub>
 
-| Galería | τ_alta | FPIR | FNIR | Rango 1 | Abstención |
+</div>
+
+## What it does
+
+- **Consent first.** Only people who enrolled in person are recognized; strangers are neither named nor stored.
+- **Nothing leaves the device.** Frames, audio and templates stay local; the e2e test asserts no requests to other origins.
+- **Silent when unsure.** A three-zone decision says «no estoy seguro» ("I'm not sure") rather than guess.
+
+<p align="center">
+  <img src="docs/assets/demo.gif" width="640" alt="Screen recording of the web app: a face appears, the box and landmarks lock on, and the whisper bubble reads «Es Marta, tu hija».">
+  <br>
+  <sub>The web app recognizing Marta and whispering «Es Marta, tu hija» ("It's Marta, your daughter"). The face is AI-generated.</sub>
+</p>
+
+## How it works
+
+Eight stages turn a camera frame into, at most, one whispered phrase per encounter. The same pipeline is implemented three times (Python, web and Android) with the same models and the same thresholds; see [Implementations](#implementations).
+
+```mermaid
+%%{init: {"flowchart": {"nodeSpacing": 24, "rankSpacing": 26, "padding": 8}}}%%
+flowchart TB
+    subgraph frame["Camera frame (glasses, phone or webcam) to face embedding"]
+        direction LR
+        pre["Preprocessing<br/>gamma, CLAHE<br/>on L*, bilateral"] --> det["Detection<br/>SCRFD-500MF<br/>box + 5 landmarks"]
+        det --> ali["Alignment<br/>Umeyama similarity<br/>to 112×112"]
+        ali --> qua["Quality<br/>Laplacian variance<br/>≥ 60, size, pose"]
+        qua --> emb["Embedding<br/>MobileFaceNet /<br/>ArcFace, 512-d"]
+    end
+    subgraph match["Face embedding to whispered phrase"]
+        direction LR
+        tpl["Template<br/>centroid of<br/>5 guided shots"] --> sea["Search<br/>1:N cosine"]
+        sea --> dec["Decision<br/>3 zones, 3-of-4 frames,<br/>1.5 s dwell"]
+        dec --> tts(["Local TTS<br/>whisper in<br/>the ear"])
+    end
+    frame --> match
+    classDef io fill:#f4f4f1,stroke:#999,color:#222
+    class tts io
+```
+
+- Quality is measured on the aligned 112×112 crop, so it runs after detection and alignment; a frame that fails it is not used.
+- Enrollment runs the same stages on 5 guided shots and stores their normalized centroid as the person's template. Recognition searches the closed, encrypted gallery of templates (up to 50 people). An image is never stored.
+
+The decision stage compares the best match `s_max` with two thresholds and answers one of three ways:
+
+```mermaid
+flowchart LR
+    s(["Best match<br/>s_max (cosine)"])
+    a["s_max ≥ 0.38<br/>Affirm"]
+    b["0.30 ≤ s_max, below 0.38<br/>Abstain"]
+    c["s_max below 0.30<br/>Discard"]
+    a2["Confirmed in 3 of 4 frames<br/>after a 1.5 s dwell:<br/>«Es Marta, tu hija»"]
+    b2["«No estoy seguro»<br/>No name is given"]
+    c2["Nobody in the circle<br/>Nothing biometric is recorded"]
+    s --> a --> a2
+    s --> b --> b2
+    s --> c --> c2
+    classDef affirm fill:#d8f0dc,stroke:#2e8b57,color:#12301c
+    classDef abstain fill:#fff1c9,stroke:#d19a00,color:#3b2c00
+    classDef discard fill:#ececec,stroke:#888,color:#222
+    class a,a2 affirm
+    class b,b2 abstain
+    class c,c2 discard
+```
+
+The thresholds shown are the defaults (τ_low = 0.30, τ_high = 0.38). The evaluation derives τ_high on a validation split for each gallery size (see [Results](#results)).
+
+## Screenshots
+
+The app's interface and spoken prompts are in Rioplatense Spanish, the language of its intended users; code, comments and docs are in English. All the faces shown are AI-generated.
+
+<table>
+  <tr>
+    <td width="50%" align="center">
+      <img src="docs/assets/screens/p07-afirmacion-full.jpg" alt="Wearer view next to the caregiver app: the face is boxed with five landmarks and the bubble reads «Es Marta, tu hija».">
+      <br><sub>Recognized: the wearer's view (left) and the caregiver app (right).</sub>
+    </td>
+    <td width="50%" align="center">
+      <img src="docs/assets/screens/p08-abstencion-full.jpg" alt="Wearer view of a person wearing sunglasses and a mask: the label reads «No estoy seguro» and the bubble «Hay alguien, pero no lo reconozco».">
+      <br><sub>Abstention: «Hay alguien, pero no lo reconozco» ("There's someone, but I don't recognize them"). Similarity 0.36 falls between 0.30 and 0.38, so no name is given.</sub>
+    </td>
+  </tr>
+</table>
+
+<table>
+  <tr>
+    <td width="33%" align="center">
+      <img src="docs/assets/screens/p-circulo.png" width="260" alt="Caregiver app, circle of trust: two people, up to 50.">
+      <br><sub>Circle of trust. Nobody can be added without being present and accepting on their own phone.</sub>
+    </td>
+    <td width="33%" align="center">
+      <img src="docs/assets/screens/p04-consentimiento.png" width="260" alt="Granular consent screen titled «Tu cara, tus reglas».">
+      <br><sub>Granular consent: what is stored, where, and for how long.</sub>
+    </td>
+    <td width="33%" align="center">
+      <img src="docs/assets/screens/p03-captura.jpg" width="260" alt="Guided capture of five shots with a live face box and landmarks.">
+      <br><sub>Guided capture of 5 shots. Photos are not stored.</sub>
+    </td>
+  </tr>
+</table>
+
+## Results
+
+The evaluation on LFW is in [`docs/eval/`](docs/eval): report, distributions, DET curve, error vs. threshold, ablation and latencies.
+
+Main results on LFW (identity-level split, τ derived on validation for FPIR = 1% and frozen before testing):
+
+| Gallery | τ_high | FPIR | FNIR | Rank-1 | Abstention |
 |---|---|---|---|---|---|
-| N = 10 | 0,269 | 0,89 % | 2,63 % | 97,4 % | 13,1 % |
-| N = 25 | 0,354 | 0,09 % | 3,37 % | 96,6 % | 1,8 % |
-| N = 50 | 0,384 | 0,11 % | 2,87 % | 97,7 % | 0,7 % |
+| N = 10 | 0.269 | 0.89% | 2.63% | 97.4% | 13.1% |
+| N = 25 | 0.354 | 0.09% | 3.37% | 96.6% | 1.8% |
+| N = 50 | 0.384 | 0.11% | 2.87% | 97.7% | 0.7% |
 
-- **Ablación:** sin alineación, el FNIR con N = 50 sube de 2,9 % a 14,9 %. Sin preprocesamiento no cambia de forma significativa en LFW (3,5 %).
-- **Errores de rango 1:** los 4 que hay con N = 50 quedan por debajo de τ_baja; ninguno habría nombrado a otra persona.
-- **Latencia por cuadro de 1280×720 en un Apple M4:** 23 ms (p50) y 33 ms (p95) en Python; 49 ms y 54 ms en el navegador con WebAssembly de 4 hilos. El aviso llega a ≈ 1,5 s por la permanencia mínima, que es deliberada.
-- **Tráfico:** la prueba e2e (`make e2e`) verifica que la app no hace ninguna solicitud a otros orígenes.
+<p align="center">
+  <img src="docs/eval/det_lfw.png" width="600" alt="DET curve on LFW: FNIR against FPIR on log axes for galleries of 10, 25 and 50 people, with the operating point of each marked.">
+  <br>
+  <sub>DET curve on LFW. The dots mark each operating point (τ_high, target FPIR 1%). More plots are in <a href="docs/eval"><code>docs/eval/</code></a>.</sub>
+</p>
 
-Todas las personas de `assets/faces/`, que usan los demos y los bancos de latencia, son **rostros sintéticos generados con IA**. La foto de `core/tests/data/group.jpg` es la imagen de muestra de InsightFace y sólo se usa en los tests.
+- **Ablation:** without alignment, FNIR at N = 50 rises from 2.9% to 14.9%. Without preprocessing there is no significant change on LFW (3.5%).
+- **Rank-1 errors:** the 4 at N = 50 fall below τ_low; none would have named another person.
+- **Latency per 1280×720 frame on an Apple M4:** 23 ms (p50) and 33 ms (p95) in Python; 49 ms and 54 ms in the browser with 4-thread WebAssembly. The announcement arrives at ≈ 1.5 s because of the minimum dwell time, which is deliberate.
+- **Traffic:** the e2e test (`make e2e`) verifies that the app makes no requests to other origins.
 
-## Inicio rápido
+All the people in `assets/faces/`, which the demos and the latency benchmarks use, are **AI-generated synthetic faces**. The photo in `core/tests/data/group.jpg` is InsightFace's sample image and is only used in tests.
 
-Requisitos: Node ≥ 20.19 (ver `.nvmrc`), [uv](https://docs.astral.sh/uv/) y, para las pruebas e2e, Google Chrome. Primero instalá todo (entorno Python, dependencias web y modelos):
+## Quick start
+
+Requirements: Node ≥ 20.19 (see `.nvmrc`), [uv](https://docs.astral.sh/uv/) and, for the e2e tests, Google Chrome. First install everything (Python environment, web dependencies and models):
 
 ```bash
 make setup
 ```
 
-Después levantá el demo:
+Then start the demo:
 
 ```bash
 make dev
 ```
 
-Queda en http://localhost:5173.
+It runs at http://localhost:5173.
 
-| Tarea | Qué hace |
+| Task | What it does |
 |---|---|
-| `make` | Lista todas las tareas |
-| `make doctor` | Verifica herramientas y modelos |
-| `make dev` / `make dev-phone` | Demo web en local / por HTTPS para abrir desde el celular |
-| `make live` | Banco de pruebas Python con la webcam (`ARGS="--listen"` para la voz) |
-| `make enroll NAME=Marta REL="tu hija"` | Alta desde Python |
-| `make test` · `make e2e` · `make check` | Tests unitarios · e2e con cámara y micrófono falsos · todo antes de un commit |
-| `make eval` | Evaluación FPIR/FNIR sobre LFW y gráficos en `docs/eval/` (umbral, DET y distribuciones) |
-| `make android` | Abre la app en Android Studio |
-| `make clean` / `make distclean` | Limpia builds / deja el repo como recién clonado |
+| `make` | Lists all tasks |
+| `make doctor` | Checks tools and models |
+| `make dev` / `make dev-phone` | Web demo locally / over HTTPS to open from your phone |
+| `make live` | Python test bench with the webcam (`ARGS="--listen"` for voice) |
+| `make enroll NAME=Marta REL="tu hija"` | Enrollment from Python. The relation is spoken back as «Es Marta, tu hija» ("It's Marta, your daughter") |
+| `make test` · `make e2e` · `make check` | Unit tests · e2e with a fake camera and microphone · everything before a commit |
+| `make eval` | FPIR/FNIR evaluation on LFW and plots in `docs/eval/` (threshold, DET and distributions) |
+| `make android` | Opens the app in Android Studio |
+| `make clean` / `make distclean` | Cleans builds / leaves the repo as freshly cloned |
 
-Modelos: `buffalo_sc` de InsightFace, que incluye RetinaFace-500MF (detección + 5 puntos) y MobileFaceNet/ArcFace (embedding de 512-d), unos 16 MB. Para la escucha por voz del demo web se suma Whisper base en ONNX cuantizado, unos 77 MB.
+Models: InsightFace's `buffalo_sc`, which includes SCRFD-500MF (detection + 5 landmarks) and MobileFaceNet/ArcFace (512-d embedding), about 16 MB. For voice listening in the web demo, quantized ONNX Whisper base is added, about 77 MB.
 
 ```bash
 scripts/download_models.sh
 ```
 
----
+## Implementations
 
-## Demo web (webcam)
+Lazo is software, not hardware: an abstract capture interface connects it to the glasses, the phone camera or a webcam. The same eight-stage pipeline (preprocessing, quality, detection, alignment, *embedding*, template, search and decision) is implemented three times, with the same models and the same thresholds:
+
+| Folder | What it is | Status |
+|---|---|---|
+| [`core/`](core) | Python test bench: reference pipeline, encrypted gallery, webcam CLI, FPIR/FNIR evaluation and DET curve | 26 tests pass, including end-to-end tests with the real models |
+| [`web/`](web) | Web demo with a webcam or phone camera. Wearer view and caregiver app, all in the browser | 23 unit tests + 5 e2e assertions pass in headless Chrome. Parity with Python: cosine ≥ 0.995 per face |
+| [`android/`](android) | Android app with the **abstract capture interface**: phone camera (CameraX), **Ray-Ban Meta** (Meta Wearables DAT 1.0) and simulated glasses (MockDeviceKit) | Written against the official sample's API; **not compiled yet** (see [Known limitations](#known-limitations)) |
+
+> [!NOTE]
+> Lazo is the project's public name. The Python package (`mnemo`, `mnemo-eval`) and the Android app keep the original name MNEMO.
+
+## Web demo (webcam)
 
 ```bash
 cd web
@@ -76,31 +200,31 @@ npm install
 npm run dev          # http://localhost:5173
 ```
 
-**En el teléfono.** La cámara exige HTTPS, así que corré esto en la misma red Wi-Fi que el teléfono:
+**On the phone.** The camera requires HTTPS, so run this on the same Wi-Fi network as the phone:
 
 ```bash
-npm run dev:phone    # https://<ip-de-tu-mac>:5173 (certificado autofirmado: aceptalo una vez)
+npm run dev:phone    # https://<your-mac-ip>:5173 (self-signed certificate: accept it once)
 ```
 
-En *Privacidad → Cámara* elegí **Trasera**. Con el teléfono a la altura de los ojos, reemplaza a las gafas: es el plan alternativo mientras no haya acceso a las gafas reales.
+In *Privacidad → Cámara* ("Privacy → Camera") choose **Trasera** ("Rear"). With the phone held at eye level, it stands in for the glasses: this is the fallback plan while there is no access to the real glasses.
 
-**Qué se puede hacer:**
-- *Invitar a alguien al círculo*: sigue la secuencia invitación → consentimiento granular → captura guiada de 5 tomas con control de nitidez y pose → ficha.
-- *Vista del portador*: recuadro, 5 puntos, similitud, confirmación 3 de 4 y la frase al oído por la voz local del sistema.
-- *Cambio de persona*: si otra cara reemplaza a la ya anunciada, se abre un encuentro nuevo. Se detecta cuando el embedding se aleja del rostro anunciado (coseno < 0,45 en 3 cuadros seguidos). Con *Avisar al cambiar de persona* activo, dice quién es sin que preguntes.
-- *Desconocidos*: «No es nadie conocido. Podés invitarlo a sumarse al círculo.». Tiene su propio toggle; cuando preguntás, contesta siempre.
-- *«¿Quién es?»* por botón, barra espaciadora o **voz**. Con *Escuchar «¿quién es?»* activo, un detector de voz recorta lo que decís y **Whisper lo transcribe en el navegador**; el audio no sale del dispositivo. Si no hay nadie, responde «No veo a nadie frente a vos.».
-- *Historial* de 7 días sin imágenes, con reporte de errores. El descarte anónimo de no enrolados sólo suma a un contador.
-- *Privacidad y umbral*: modo privacidad, umbral τ con la banda de abstención visible, FPIR/FNIR estimados (cargando el `eval_report.json` de `core`), exportar auditoría, borrar plantillas y un contador de conexiones salientes.
-- La galería se cifra con AES-GCM, con una clave WebCrypto **no extraíble** guardada en IndexedDB. Nunca se guarda una imagen.
+**What you can do:**
+- *Invite someone to the circle*: follows the sequence invitation → granular consent → guided capture of 5 shots with sharpness and pose checks → profile.
+- *Wearer view*: bounding box, 5 landmarks, similarity, 3-of-4 confirmation and the phrase whispered in the ear by the system's local voice.
+- *Person change*: if another face replaces the one already announced, a new encounter starts. It is detected when the embedding moves away from the announced face (cosine < 0.45 for 3 consecutive frames). With *Avisar cuando cambia la persona* ("Announce when the person changes") on, it says who it is without you asking.
+- *Unknown people*: «No es nadie conocido. Podés invitarlo a sumarse al círculo.» ("This is nobody known. You can invite them to join the circle."). It has its own toggle; when you ask, it always answers.
+- *The «¿Quién es?» ("Who is it?") query* by button, space bar or **voice**. With *Escuchar «¿Quién es?»* ("Listen for «¿Quién es?»") on, a voice detector clips what you say and **Whisper transcribes it in the browser**; the audio does not leave the device. If nobody is there, it answers «No veo a nadie frente a vos.» ("I don't see anyone in front of you.").
+- *History* covering 7 days, without images, with error reporting. The anonymous discard of non-enrolled people only increments a counter.
+- *Privacy and threshold*: privacy mode, threshold τ with the abstention band visible, estimated FPIR/FNIR (by loading `core`'s `eval_report.json`), audit export, template deletion and a counter of outbound connections.
+- The gallery is encrypted with AES-GCM, using a **non-extractable** WebCrypto key stored in IndexedDB. An image is never stored.
 
-**Pruebas:**
+**Tests:**
 
 ```bash
 npm test
 ```
 
-Para la prueba e2e, con `npm run dev` corriendo:
+For the e2e test, with `npm run dev` running:
 
 ```bash
 ../.venv/bin/python e2e/make_fixtures.py
@@ -110,7 +234,7 @@ Para la prueba e2e, con `npm run dev` corriendo:
 npm run e2e
 ```
 
-## Banco de pruebas en Python (`core/`)
+## Python test bench (`core/`)
 
 ```bash
 uv venv -p 3.11 .venv
@@ -132,83 +256,96 @@ cd core && ../.venv/bin/pytest
 ../.venv/bin/mnemo live
 ```
 
-`mnemo live --source` también acepta la URL de una IP-cam del teléfono, o `glasses` para el puente desde la app Android.
+`mnemo live --source` also accepts the URL of a phone IP cam, or `glasses` for the bridge from the Android app.
 
-**Evaluación.** El conjunto va en carpetas `data/<persona>/*.jpg`. La partición se hace por identidad. El umbral se deriva en validación para el FPIR objetivo y se congela antes de evaluar en prueba. Se barre N = 10, 25 y 50:
+**Evaluation.** The dataset goes in `data/<person>/*.jpg` folders. The split is by identity. The threshold is derived on validation for the target FPIR and frozen before evaluating on test. N = 10, 25 and 50 are swept:
 
 ```bash
 ../.venv/bin/mnemo-eval data/ --target-fpir 0.01 --out eval_report.json
 ```
 
-Opciones de `mnemo-eval`:
-- `--dump-scores` guarda las similitudes de genuinas e impostoras, que usa `scripts/plot_scores.py`.
-- `--no-align` y `--no-enhance` sirven para la ablación.
-- `--band` cambia el ancho de la banda de abstención (0,08 por defecto).
+`mnemo-eval` options:
+- `--dump-scores` saves the genuine and impostor similarities, which `scripts/plot_scores.py` uses.
+- `--no-align` and `--no-enhance` are for the ablation.
+- `--band` changes the width of the abstention band (0.08 by default).
 
-Estos son los análisis de la evaluación; todos escriben en `docs/eval/`:
+These are the evaluation analyses; all of them write to `docs/eval/`:
 
 ```bash
-.venv/bin/python scripts/ablacion.py           # ablación de alineación/preprocesamiento y ancho de banda
+.venv/bin/python scripts/ablacion.py           # ablation of alignment/preprocessing and band width
 ```
 
 ```bash
-.venv/bin/python scripts/bench_latency.py      # latencia por etapa (CPU) y búsqueda vs. tamaño de galería
+.venv/bin/python scripts/bench_latency.py      # per-stage latency (CPU) and search vs. gallery size
 ```
 
 ```bash
-cd web && node e2e/bench.mjs                   # latencia en el navegador (WASM, con y sin COOP/COEP) y de Whisper
+cd web && node e2e/bench.mjs                   # in-browser latency (WASM, with and without COOP/COEP) and Whisper's
 ```
 
-`make data-lfw` baja LFW desde el mirror de figshare, que redirige a S3 con una firma de pocos segundos. Si la red es lenta, el archivo puede quedar con cuerpos de error intercalados. Verificá con `gzip -t data/.cache/lfw.tgz`; el MD5 correcto es `a17d05bd522c52d84eca14327a23d494`.
+`make data-lfw` downloads LFW from the figshare mirror, which redirects to S3 with a signature valid for a few seconds. On a slow network the file can end up with error bodies interleaved. Check it with `gzip -t data/.cache/lfw.tgz`; the correct MD5 is `a17d05bd522c52d84eca14327a23d494`.
 
-## App Android (`android/`)
+## Android app (`android/`)
 
-Abrila con Android Studio (JDK 17, SDK 36). Los modelos se copian solos desde `../models`.
+Open it with Android Studio (JDK 17, SDK 36). The models are copied automatically from `../models`.
 
-- `capture/CaptureSource.kt` es la interfaz abstracta. `PhoneCameraSource` usa CameraX. `GlassesCameraSource` usa `Wearables.createSession`, luego `addCamera(StreamConfiguration(compressVideo = false))` y luego `videoStream`, y convierte I420 a Bitmap.
-- *Gafas simuladas* usa el MockDeviceKit del SDK con la cámara del teléfono: prueba toda la ruta del DAT sin hardware.
-- Para usar las gafas reales:
-  1. Activá Developer Mode en la app Meta AI.
-  2. Tocá *Registrar gafas*.
-  3. Concedé la cámara de las gafas cuando Meta AI lo pida.
-  4. Si hace falta, cargá `mwdat_application_id` y `mwdat_client_token` en `local.properties`.
-- La frase sale con el TTS local del sistema. Las gafas son una salida de audio Bluetooth y el SDK no expone una API de altavoz.
+- `capture/CaptureSource.kt` is the abstract interface. `PhoneCameraSource` uses CameraX. `GlassesCameraSource` uses `Wearables.createSession`, then `addCamera(StreamConfiguration(compressVideo = false))` and then `videoStream`, and converts I420 to Bitmap.
+- *Simulated glasses* uses the SDK's MockDeviceKit with the phone camera: it exercises the whole DAT path without hardware.
+- To use the real glasses:
+  1. Enable Developer Mode in the Meta AI app.
+  2. Tap *Registrar gafas* ("Register glasses").
+  3. Grant the glasses' camera permission when Meta AI asks for it.
+  4. If needed, set `mwdat_application_id` and `mwdat_client_token` in `local.properties`.
+- The phrase is spoken with the system's local TTS. The glasses are a Bluetooth audio output and the SDK exposes no speaker API.
 
----
+## Before using the real glasses: Meta's policy
 
-## ⚠️ Antes de usar las gafas reales: política de Meta
+> [!WARNING]
+> The [Meta Wearables Acceptable Use Policy](https://wearables.developer.meta.com/acceptable-use-policy) **prohibits** using the glasses' sensors to identify people by their face or voice. The only exception is accessibility apps **with prior approval from Meta**. It also prohibits covering the capture LED.
 
-La [Acceptable Use Policy de Meta Wearables](https://wearables.developer.meta.com/acceptable-use-policy) **prohíbe** usar los sensores de las gafas para identificar personas por su rostro o su voz. La única excepción son las apps de accesibilidad **con aprobación previa de Meta**. También prohíbe tapar el LED de captura. MNEMO entra en esa excepción por diseño (accesibilidad, galería cerrada y consentida), pero **hay que pedir la aprobación** antes de probarlo con las Ray-Ban. Mientras tanto, las métricas se obtienen con la cámara del teléfono, que es el plan previsto para este riesgo.
+By design, Lazo falls within that exception (accessibility, closed and consented gallery), but **approval must be requested** before trying it on the Ray-Ban glasses. In the meantime, the metrics are obtained with the phone camera, which is the planned mitigation for this risk.
 
-## Limitaciones conocidas
+## Responsible use
 
-- **Android no se compiló en esta máquina**: no hay JDK y el SDK local es el 33, mientras que el DAT 1.0 requiere compileSdk 36. El código sigue la API del sample oficial `CameraAccess` 1.0.0. Hay que confirmar el formato del buffer en hardware real, porque el SDK documenta «YUV» sin especificar el layout.
-- **El DAT pide el permiso `INTERNET`** para coordinarse con la app Meta AI. El pipeline de MNEMO no abre conexiones, pero la afirmación «0 tráfico saliente» hay que verificarla con una captura de red y documentar el tráfico propio del SDK.
-- **Preprocesamiento web más liviano**: el navegador aplica corrección gamma, pero no CLAHE ni el filtro bilateral que sí aplica `core`.
-  - Los umbrales se calibran con `core`. La paridad, medida sobre los mismos recortes, es ≥ 0,995 de coseno, pero esa medición no forma parte de las suites automáticas.
-  - En los casos límite la diferencia de preprocesamiento cruza el umbral. Con barbijo y anteojos de sol, Marta da 0,336 en `core` (se abstiene) y 0,386 en la web (la nombra).
-  - Falta portar CLAHE a la web o derivar un τ propio para ella.
-- **Calibración en círculos chicos**: con 1–2 personas la app usa la curva de N = 10 del reporte, que es casi plana entre Rápido y Prudente, así que la estimación de errores no cambia entre niveles. Para el demo se cargó la curva de N = 50.
-- **Barra de pestañas del celular**: la topbar mide 60,6 px y `web/src/style.css` asume 57 px, así que la barra inferior queda unos 3,6 px cortada en un viewport de 390×844.
-- **«¿Quién es?» por voz**: no se usa el reconocimiento de voz de Chrome, porque envía el audio a Google y rompería la regla de que nada sale del dispositivo. Cada plataforma usa reconocimiento local:
-  - Web: Whisper base con transformers.js.
-  - `core`: faster-whisper (`uv pip install -e "core[voice]"`, luego `mnemo live --listen`).
-  - Android: `SpeechRecognizer.createOnDeviceSpeechRecognizer`. Usa el micrófono del teléfono; para usar el de las gafas está `mwdat-speech`, experimental en el DAT 1.0.
+Lazo is built for consented, assistive use only: helping a person with dementia remember people who agreed, in person, to be recognized.
 
-  Whisper a veces entiende «¿Qué es?» en lugar de «¿Quién es?»: esa variante se acepta sólo como frase completa.
-- **Cambio de persona y «una frase por encuentro»**: la regla se mantiene, pero ahora un encuentro también termina cuando cambia la cara. El umbral de cambio (0,45) está fijado a ojo y conviene calibrarlo con el conjunto propio.
-- **Invitación por QR**: en el demo, el alta ocurre en el mismo navegador y el QR es ilustrativo. En la app real el token viaja al teléfono del invitado.
-- **iOS**: no implementado. El DAT tiene SDK Swift equivalente (`meta-wearables-dat-ios`).
-- **Licencia de los pesos**: los modelos de InsightFace son sólo para investigación no comercial. Por eso no se versionan: se descargan con el script.
+- It is not for surveillance or for identifying strangers. The gallery is closed: people who were not enrolled are never named, and discarding them only increments a counter.
+- It is a research prototype, evaluated only on LFW, and not a medical device.
+- The Meta Wearables Acceptable Use Policy requires prior approval to identify people by face with the glasses; see [Meta's policy](#before-using-the-real-glasses-metas-policy).
 
-## Licencias
+## Known limitations
 
-- **Código:** MIT, ver [`LICENSE`](LICENSE).
-- **Modelos:** los pesos no se versionan ni se redistribuyen en este repositorio. `make models` (o `scripts/download_models.sh`) los baja de su origen y cada uno conserva su propia licencia:
-  - **InsightFace `buffalo_sc`**: detector SCRFD-500MF (`det_500m.onnx`) y reconocedor MobileFaceNet entrenado con ArcFace sobre WebFace600K (`w600k_mbf.onnx`), del release v0.7 de [`deepinsight/insightface`](https://github.com/deepinsight/insightface). El código de InsightFace es MIT, pero **los modelos son sólo para investigación no comercial**: así lo indica su README, tanto para la descarga manual como para la automática. Para cualquier uso comercial hay que consultar a sus autores.
-  - **Whisper base** (escucha por voz): OpenAI publica el código y los pesos de Whisper bajo licencia MIT (la ficha de `openai/whisper-base` en Hugging Face declara Apache-2.0).
-    - El demo web usa la conversión a ONNX cuantizado [`onnx-community/whisper-base`](https://huggingface.co/onnx-community/whisper-base), derivada de `openai/whisper-base`. Su ficha no declara una licencia propia.
-    - `core` usa `faster-whisper`, que en la primera ejecución baja `Systran/faster-whisper-base` a la caché de Hugging Face. Su ficha declara MIT.
-- **LFW:** se usa sólo para evaluar (`make data-lfw` lo baja a `data/`, que no se versiona) y no se redistribuye. En `docs/eval/` quedan únicamente métricas y gráficos agregados.
-- **Rostros sintéticos:** los de `assets/faces/` están generados con IA.
-- **Foto de prueba:** `core/tests/data/group.jpg` es `t1.jpg`, la imagen de muestra que trae el paquete `insightface` (repositorio con licencia MIT). Se usa sólo en los tests.
+- **Android was not compiled on this machine**: there is no JDK and the local SDK is 33, while DAT 1.0 requires compileSdk 36. The code follows the API of the official `CameraAccess` 1.0.0 sample. The buffer format has to be confirmed on real hardware, because the SDK documents "YUV" without specifying the layout.
+- **The DAT requests the `INTERNET` permission** to coordinate with the Meta AI app. Lazo's pipeline opens no connections, but the "zero outbound traffic" claim has to be verified with a network capture, documenting the SDK's own traffic.
+- **Lighter web preprocessing**: the browser applies gamma correction, but not the CLAHE or the bilateral filter that `core` applies.
+  - The thresholds are calibrated with `core`. Parity, measured on the same crops, is ≥ 0.995 cosine, but that measurement is not part of the automated suites.
+  - In borderline cases the preprocessing difference crosses the threshold. With a face mask and sunglasses, Marta scores 0.336 in `core` (it abstains) and 0.386 on the web (it names her).
+  - CLAHE still has to be ported to the web, or a dedicated τ derived for it.
+- **Calibration in small circles**: with 1–2 people the app uses the N = 10 curve from the report, which is almost flat between *Rápido* ("Fast") and *Prudente* ("Cautious"), so the error estimate does not change between levels. For the demo, the N = 50 curve was loaded.
+- **Phone tab bar**: the top bar is 60.6 px tall and `web/src/style.css` assumes 57 px, so the bottom bar ends up about 3.6 px cut off in a 390×844 viewport.
+- **The «¿Quién es?» voice query**: Chrome's speech recognition is not used, because it sends the audio to Google and would break the rule that nothing leaves the device. Each platform uses local recognition:
+  - Web: Whisper base with transformers.js.
+  - `core`: faster-whisper (`uv pip install -e "core[voice]"`, then `mnemo live --listen`).
+  - Android: `SpeechRecognizer.createOnDeviceSpeechRecognizer`. It uses the phone's microphone; for the glasses' microphone there is `mwdat-speech`, experimental in DAT 1.0.
+
+  Whisper sometimes hears «¿Qué es?» ("What is it?") instead of «¿Quién es?»: that variant is accepted only as a complete phrase.
+- **Person change and "one phrase per encounter"**: the rule still holds, but an encounter now also ends when the face changes. The change threshold (0.45) was set by eye and should be calibrated with the project's own dataset.
+- **QR invitation**: in the demo, enrollment happens in the same browser and the QR is illustrative. In the real app the token travels to the invitee's phone.
+- **iOS**: not implemented. The DAT has an equivalent Swift SDK (`meta-wearables-dat-ios`).
+- **Weights licence**: InsightFace's models are for non-commercial research purposes only. That is why they are not versioned: they are downloaded with the script.
+
+## Origin
+
+Lazo (formerly MNEMO) started as the final project for the Computer Vision course of the Master's in Artificial Intelligence at Universidad de Palermo (2026). It is a **research prototype**: it is not a medical device and it is not ready for production use (see [Known limitations](#known-limitations)).
+
+## Licenses
+
+- **Code:** MIT, see [`LICENSE`](LICENSE).
+- **Models:** the weights are not versioned or redistributed in this repository. `make models` (or `scripts/download_models.sh`) downloads them from their source, and each one keeps its own licence:
+  - **InsightFace `buffalo_sc`**: SCRFD-500MF detector (`det_500m.onnx`) and MobileFaceNet recognizer trained with ArcFace on WebFace600K (`w600k_mbf.onnx`), from the v0.7 release of [`deepinsight/insightface`](https://github.com/deepinsight/insightface). InsightFace's code is MIT, but **the models are for non-commercial research purposes only**: its README says so, for both manual and automatic download. For any commercial use, the authors must be consulted.
+  - **Whisper base** (voice listening): OpenAI publishes Whisper's code and weights under the MIT licence (the `openai/whisper-base` model card on Hugging Face declares Apache-2.0).
+    - The web demo uses the quantized ONNX conversion [`onnx-community/whisper-base`](https://huggingface.co/onnx-community/whisper-base), derived from `openai/whisper-base`. Its model card does not declare a licence of its own.
+    - `core` uses `faster-whisper`, which on first run downloads `Systran/faster-whisper-base` into the Hugging Face cache. Its model card declares MIT.
+- **LFW:** used only for evaluation (`make data-lfw` downloads it into `data/`, which is not versioned) and not redistributed. Only aggregate metrics and plots are kept in `docs/eval/`.
+- **Synthetic faces:** those in `assets/faces/` are AI-generated.
+- **Test photo:** `core/tests/data/group.jpg` is `t1.jpg`, the sample image shipped with the `insightface` package (an MIT-licensed repository). It is only used in the tests.
