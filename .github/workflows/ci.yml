@@ -1,0 +1,86 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # Web app: type checking and unit tests. Neither needs the ONNX models
+  # (the tests only cover the decision engine, image ops and voice helpers).
+  web:
+    name: web (tsc + vitest)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: web
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci --no-audit --no-fund
+
+      - name: Type check
+        run: npx tsc --noEmit
+
+      - name: Unit tests
+        run: npx vitest run
+
+  # Python core: same steps as `make venv`, `make models` and `make test-core`.
+  core:
+    name: core (pytest)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version-file: .python-version
+
+      # astral-sh/setup-uv does not publish a floating major tag, so it is pinned to a release.
+      - uses: astral-sh/setup-uv@v10.3.0
+        with:
+          enable-cache: true
+          cache-dependency-glob: core/pyproject.toml
+
+      # opencv-python (not the headless build) loads libGL / glib at import time.
+      - name: Install system libraries
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends libgl1 libglib2.0-0
+
+      - name: Install core (dev + voice extras)
+        run: |
+          uv venv -q -p "$(cat .python-version)" .venv
+          uv pip install -q -p .venv -e "core[dev,voice]"
+
+      # ~95 MB (InsightFace buffalo_sc + Whisper base). The script is idempotent: it only
+      # downloads what is missing, so on a cache hit it just prints the checksums.
+      - name: Cache models
+        uses: actions/cache@v6
+        with:
+          path: models
+          key: models-${{ hashFiles('scripts/download_models.sh') }}
+
+      - name: Download models
+        run: scripts/download_models.sh
+
+      - name: Core tests
+        working-directory: core
+        run: ../.venv/bin/python -m pytest -q
