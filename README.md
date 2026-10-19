@@ -16,9 +16,12 @@
 
 [What it does](#what-it-does) · [How it works](#how-it-works) · [Screenshots](#screenshots) · [Results](#results) · [Quick start](#quick-start) · [Responsible use](#responsible-use) · [Known limitations](#known-limitations)
 
-<a href="https://github.com/nievesjesus/lazo/releases/download/v0.1.0/lazo-trailer.mp4"><img src="docs/assets/trailer-play.jpg" alt="Lazo trailer: click to play the video" width="720"></a>
-
-<sub>Trailer (1:27, Spanish)</sub>
+<table>
+<tr>
+<td align="center" width="50%"><a href="https://github.com/nievesjesus/lazo/releases/download/v0.1.0/lazo-trailer.mp4"><img src="docs/assets/trailer-play.jpg" alt="Lazo trailer: click to play the video" width="100%"></a><br><sub><b>Trailer</b> · 1:27 · Spanish</sub></td>
+<td align="center" width="50%"><a href="https://github.com/nievesjesus/lazo/releases/download/v0.1.0/lazo-demo.mp4"><img src="docs/assets/demo-play.jpg" alt="Lazo technical demo: click to play the video" width="100%"></a><br><sub><b>Technical demo</b> · 2:26 · Spanish, English subtitles</sub></td>
+</tr>
+</table>
 
 </div>
 
