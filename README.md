@@ -18,7 +18,7 @@
 
 <a href="https://github.com/nievesjesus/lazo/releases/download/v0.1.0/lazo-trailer.mp4"><img src="docs/assets/trailer-play.jpg" alt="Lazo trailer: click to play the video" width="720"></a>
 
-<sub>Trailer (1:30, Spanish)</sub>
+<sub>Trailer (1:27, Spanish)</sub>
 
 </div>
 
