@@ -1,7 +1,9 @@
-# MNEMO
+# Lazo (antes MNEMO)
 
 Prueba de concepto del TP de **Visión por Computadora** (Maestría en IA, Universidad de Palermo).
-MNEMO es un sistema de reconocimiento facial **consentido**, como apoyo a la memoria social de personas con demencia. Está pensado para gafas inteligentes, pero es software: se conecta a las gafas, a la cámara del teléfono o a una webcam a través de una interfaz de captura abstracta. Sólo identifica a quienes se enrolaron en persona, todo el cómputo ocurre en el dispositivo y, ante la duda, dice «no estoy seguro» antes que arriesgar un nombre.
+Lazo (antes MNEMO) es un sistema de reconocimiento facial **consentido**, como apoyo a la memoria social de personas con demencia. Está pensado para gafas inteligentes, pero es software: se conecta a las gafas, a la cámara del teléfono o a una webcam a través de una interfaz de captura abstracta. Sólo identifica a quienes se enrolaron en persona, todo el cómputo ocurre en el dispositivo y, ante la duda, dice «no estoy seguro» antes que arriesgar un nombre.
+
+Lazo es el nombre público del proyecto; el informe del TP, el paquete Python (`mnemo`, `mnemo-eval`) y la app Android conservan el nombre MNEMO.
 
 El mismo pipeline de ocho etapas (figura 7 de la pre-entrega) está implementado tres veces, con los mismos modelos y los mismos umbrales:
 
@@ -17,6 +19,8 @@ El mismo pipeline de ocho etapas (figura 7 de la pre-entrega) está implementado
 |---|---|
 | Informe final (PDF, 26 págs.) | [`docs/informe/MNEMO-Entrega-final-Nieves.pdf`](docs/informe/MNEMO-Entrega-final-Nieves.pdf) · fuente en [`docs/informe/informe.md`](docs/informe/informe.md) |
 | Video demo (3:07, 1080p) | Se comparte aparte (64 MB): no se versiona por tamaño. Se regenera en `docs/video/out/mnemo-demo.mp4` con los pasos de [Informe y video](#informe-y-video-docs). Portada: [`docs/video/out/poster.png`](docs/video/out/poster.png) |
+| Resumen técnico (PDF, 2 págs.) | [`docs/informe/MNEMO-Resumen-tecnico.pdf`](docs/informe/MNEMO-Resumen-tecnico.pdf) · fuente en [`docs/informe/resumen-tecnico.md`](docs/informe/resumen-tecnico.md) |
+| Tráiler de Lazo (1:30, 2.39:1) | Se comparte aparte (26 MB). Guion y regeneración en [`docs/video/trailer/GUION.md`](docs/video/trailer/GUION.md). Portada: [`docs/video/out/poster-trailer.jpg`](docs/video/out/poster-trailer.jpg) |
 | Evaluación sobre LFW | [`docs/eval/`](docs/eval): reporte, distribuciones, curva DET, error vs. umbral, ablación y latencias |
 
 Resultados principales sobre LFW (partición por identidad, τ derivado en validación para FPIR = 1 % y congelado antes de prueba):
@@ -177,6 +181,9 @@ cd web && node e2e/bench.mjs                   # latencia en el navegador (WASM,
   - `record/record.mjs` graba la app real con una cámara virtual que muestra los rostros sintéticos de `assets/faces/`. Deja clips, logs de eventos y las capturas del informe. Los clips (`rec/*.mp4`) y el video final no se versionan: se regeneran con los comandos de abajo.
   - `shared/` tiene el guion, la marca y el audio. La narración y las voces son de ElevenLabs.
   - `remotion/` arma el montaje.
+- **`docs/video/trailer/`**: tráiler de Lazo, en tono de película y sin nada técnico. Las tomas son de Seedance 2.5, generadas en Leonardo. Las voces, los efectos y la música son de ElevenLabs. El montaje es la composición `LazoTrailer` de Remotion. Los pasos están en su [`GUION.md`](docs/video/trailer/GUION.md).
+- **`docs/video/comercial/`**: comercial de 85 s con tomas de Wan 3.0 y la app real regrabada sin datos técnicos (composición `MnemoComercial`).
+- Las tomas generadas con IA (`live/*.mp4`) y las grabaciones de la app no se versionan por tamaño. Quedan los prompts, las referencias y la metadata de cada generación.
 
 ```bash
 node docs/video/record/record.mjs              # ~10 min; --only 02-reconoce,capturas para partes sueltas

@@ -356,7 +356,7 @@ export class App {
   private shell() {
     return `
     <header class="topbar">
-      <div class="brand"><span class="logo">M</span><div><strong>MNEMO</strong><small>Te dice al oído quién tenés enfrente</small></div></div>
+      <div class="brand"><span class="logo">L</span><div><strong>Lazo</strong><small>Te dice al oído quién tenés enfrente</small></div></div>
       <nav class="switch" aria-label="Vista">
         <button data-view="wearer" class="on">${icon('glasses', 18)}<span>Gafas</span></button>
         <button data-view="phone">${icon('users', 18)}<span>Cuidador</span></button>

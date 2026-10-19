@@ -36,7 +36,7 @@ code { font-size: 0.85em; background: #e9e9e9; padding: 1px 4px; border-radius: 
 .topbar { position: sticky; top: 0; z-index: 20; display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 24px; background: rgba(255, 255, 255, 0.92); backdrop-filter: blur(8px); border-bottom: 1px solid var(--line); }
 .brand { display: flex; align-items: center; gap: 10px; min-width: 0; }
 .brand .logo { width: 34px; height: 34px; margin: 0; font-size: 16px; }
-.brand strong { display: block; letter-spacing: 0.06em; font-size: 15px; }
+.brand strong { display: block; letter-spacing: 0.01em; font-size: 15px; }
 .brand small { color: var(--muted); font-size: 13px; }
 .top-actions { display: flex; gap: 8px; align-items: center; }
 .icon-btn { width: 40px; height: 40px; border-radius: 12px; border: 1px solid var(--line); background: var(--paper); display: grid; place-items: center; color: var(--ink-2); flex: none; }
