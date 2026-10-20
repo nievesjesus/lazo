@@ -18,10 +18,12 @@
 
 <table>
 <tr>
-<td align="center" width="50%"><a href="https://youtu.be/NOhLmrdwsnE"><img src="docs/assets/trailer-play.jpg" alt="Lazo trailer on YouTube: click to play" width="100%"></a><br><sub><b>Trailer</b> · 1:27 · Spanish, subtitles in English</sub></td>
-<td align="center" width="50%"><a href="https://youtu.be/1OHY7_qXPm0"><img src="docs/assets/demo-play.jpg" alt="Lazo technical demo on YouTube: click to play" width="100%"></a><br><sub><b>Technical demo</b> · 2:26 · Spanish, subtitles in English</sub></td>
+<td align="center" width="50%"><a href="https://github.com/nievesjesus/lazo/releases/download/v0.1.0/lazo-trailer-en.mp4"><img src="docs/assets/trailer-play-en.jpg" alt="Lazo trailer: click to play" width="100%"></a><br><sub><b>Trailer</b> · 1:27</sub></td>
+<td align="center" width="50%"><a href="https://github.com/nievesjesus/lazo/releases/download/v0.1.0/lazo-demo-en.mp4"><img src="docs/assets/demo-play-en.jpg" alt="Lazo technical demo: click to play" width="100%"></a><br><sub><b>Technical demo</b> · 2:16</sub></td>
 </tr>
 </table>
+
+<sub>En español: <a href="https://youtu.be/NOhLmrdwsnE">tráiler</a> · <a href="https://youtu.be/1OHY7_qXPm0">demo técnica</a></sub>
 
 </div>
 
